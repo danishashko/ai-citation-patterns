@@ -1,0 +1,32 @@
+# HTTP / API
+requests>=2.31.0
+httpx>=0.27.0
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+
+# Data
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Statistics
+scipy>=1.12.0
+statsmodels>=0.14.0
+
+# Visualization
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Notebook
+jupyter>=1.0.0
+ipykernel>=6.29.0
+
+# URL / text utilities
+urllib3>=2.2.0
+tqdm>=4.66.0
+python-dotenv>=1.0.0
+chardet>=5.2.0
+
+# Optional: async collection
+aiohttp>=3.9.0
