@@ -1,213 +1,150 @@
-# Grounding Citation Analysis
+# AI Citation Patterns — May 2026
 
-**Reverse engineering Google AI Mode's sentence-level citation behaviour using `#:~:text=` URL fragments.**
+**153,425 citations. 5,000 queries. 6 AI platforms.**
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+This repo contains the dataset, analysis scripts, and findings from a large-scale study of how AI search platforms select and cite web content.
 
----
-
-## The Core Insight
-
-Every Google AI Mode and Gemini citation URL contains a hidden [Web Text Fragment](https://web.dev/text-fragments/) anchor:
-
-```
-https://example.com/page#:~:text=Exact%20sentence%20Google%20cited%20here
-```
-
-Decode it and you know **exactly which sentence Google extracted** from the source page — no guesswork. This is the first reproducible study to exploit this at scale.
+**Read the full article:** [How AI Search Platforms Cite the Web — May 2026 Edition](https://hackmd.io/@A09fyOMpSD2VYIJodmXHqQ/SyKkHeLJfl)
 
 ---
 
-## What This Repo Does
+## What This Study Covers
 
-```mermaid
-flowchart LR
-    A[queries.csv\n100 queries] --> B[Bright Data\nAI Mode Scraper]
-    B --> C[Raw citation JSON\nwith #:~:text= URLs]
-    C --> D[Text fragment\nparser]
-    D --> E[Cited sentence\nper citation row]
-    E --> F[Source page\nscraper]
-    F --> G[Positional\nanalysis]
-    G --> H[Statistical\nanalysis + Charts]
-```
+We ran 5,000 queries across six AI platforms and recorded every cited URL, decoding the exact cited sentence whenever the platform exposed a `#:~:text=` text fragment. Key findings:
 
-1. **Collect** — Use Bright Data's Google AI Mode Scraper (real SERP, not API) to gather citation URLs for 100 queries
-2. **Parse** — Decode `#:~:text=` fragments to extract the exact cited sentence from every citation URL
-3. **Scrape** — Fetch source pages and locate each cited sentence within the document (positional analysis)
-4. **Analyse** — Statistical tests for positional bias, sentence length preferences, structured content advantage, platform divergence
-5. **Visualise** — Publication-quality charts for the accompanying article
+- **Google AI Mode** dropped text fragment exposure entirely (was 70.9% in March 2026, now 0%).
+- **Gemini** expanded fragment coverage to 84.1% — the only remaining window into Google's sentence-level chunking logic.
+- **ChatGPT cited URLs overlap Google top-10 at just 4.2%.** Classical SEO does not transfer to ChatGPT.
+- **Median cited sentence: 10 words.** Nothing longer than 18 words was cited in the Gemini fragment sample.
+- **Cited sentences cluster in the top 37% of the page.** Front-loaded claims win.
+- **Freshness collapsed**: median cited content age dropped from 2.2 years (March 2026) to 298 days.
 
 ---
 
-## Quick Start
+## Platforms
 
-### Prerequisites
+| Platform | Citations | Fragment coverage | SERP URL overlap |
+|---|---|---|---|
+| Google AI Mode | 88,392 | 0% | 22.5% |
+| Grok | 30,676 | 0% | 14.1% |
+| Gemini | 13,487 | 84.1% | 41.1% |
+| Microsoft Copilot | 8,779 | 0% | 23.7% |
+| Perplexity | 8,562 | 0% | 39.4% |
+| ChatGPT | 3,529 | 0% | 4.2% |
+| **Total** | **153,425** | | |
 
-- Python 3.11+
-- A [Bright Data](https://brightdata.com) account with API key
-- ~$6–25 budget for data collection (1,000 queries + source pages ≈ $25 max)
+---
 
-### Setup
+## Repo Structure
+
+```
+data/
+  parsed/
+    citations.csv          # 153,425 citation rows: URL, platform, query, fragment, cited_text
+    answers.csv            # Raw AI answers per query per platform
+    serp.csv               # Organic SERP top-10 for each query
+    source_pages.csv       # Scraped source pages for positional analysis
+  analysis/
+    summary_stats.json
+    domain_frequency.csv
+    citation_vs_serp_rank.csv
+    positional_distribution.csv
+    readability_per_sentence.csv
+    readability_stats.json
+    sentence_length_stats.csv
+    freshness_dates.csv
+    freshness_stats.json
+    platform_overlap.csv
+    category_breakdown.csv
+queries/
+  queries.csv              # 5,000 queries used in this study
+scripts/
+  01_collect_ai_mode.py    # Collect AI Mode citations via Bright Data scraper
+  02_collect_gemini.py     # Collect Gemini citations + text fragments
+  02b_collect_serp.py      # Collect organic SERP top-10 for each query
+  03_parse_text_fragments.py  # Decode #:~:text= fragments to cited sentences
+  04_scrape_source_pages.py   # Scrape source pages for positional analysis
+  05_analyze_patterns.py      # Core statistical analysis
+  06_generate_charts.py       # Initial chart generation
+  07_readability_analysis.py  # Flesch-Kincaid readability per sentence
+  08_freshness_analysis.py    # Content age analysis
+  09_generate_v2_charts.py    # Final publication charts (reports/v2/)
+notebooks/
+  01_methodology.ipynb     # Study design and methodology walkthrough
+  02_findings.ipynb        # Interactive findings exploration
+reports/
+  v2/                      # Publication-ready charts (PNG, 2x scale)
+article/
+  article.md               # Full research article
+  article_linkedin.md      # LinkedIn-formatted version
+```
+
+---
+
+## Quickstart (data already included)
 
 ```bash
-git clone https://github.com/yourusername/grounding-citation-analysis
-cd grounding-citation-analysis
-
-# Install dependencies
+git clone https://github.com/danishashko/ai-citation-patterns
+cd ai-citation-patterns
 pip install -r requirements.txt
 
-# Configure credentials
-cp .env.example .env
-# Edit .env and set: BRIGHTDATA_API_KEY=your_key_here
-```
-
-### Run the Full Pipeline
-
-```bash
-# Step 1: Collect AI Mode citations
-python scripts/01_collect_ai_mode.py --limit 20  # start small to verify
-
-# Step 2: (Optional) Collect Gemini citations
-# Set BRIGHTDATA_GEMINI_DATASET_ID in .env first
-python scripts/02_collect_gemini.py --limit 20
-
-# Step 3: Parse #:~:text= fragments → citations.csv
-python scripts/03_parse_text_fragments.py
-
-# Step 4: Scrape source pages (positional analysis)
-python scripts/04_scrape_source_pages.py --limit 100  # start small
-
-# Step 5: Statistical analysis
+# Run analysis on the included dataset
 python scripts/05_analyze_patterns.py
 
-# Step 6: Generate charts
-python scripts/06_generate_charts.py
+# Regenerate charts
+python scripts/09_generate_v2_charts.py
+```
+
+**To collect fresh data** you need a [Bright Data](https://brightdata.com) account with access to the Google AI Mode and SERP scrapers:
+
+```bash
+cp .env.example .env
+# Edit .env and add your BRIGHTDATA_API_KEY
+python scripts/01_collect_ai_mode.py --limit 50
 ```
 
 ---
 
-## Project Structure
+## Data Schema
 
-```
-grounding-citation-analysis/
-├── .env                          # Your Bright Data API key (not committed)
-├── .gitignore
-├── requirements.txt
-├── README.md
-│
-├── queries/
-│   └── queries.csv               # 100 queries across 12 categories
-│
-├── scripts/
-│   ├── 01_collect_ai_mode.py     # Bright Data AI Mode Scraper trigger + poll
-│   ├── 02_collect_gemini.py      # Bright Data Gemini Scraper trigger + poll
-│   ├── 03_parse_text_fragments.py # #:~:text= URL decoder → citations.csv
-│   ├── 04_scrape_source_pages.py  # Source page fetcher + positional analysis
-│   ├── 05_analyze_patterns.py    # Statistical analysis (scipy)
-│   └── 06_generate_charts.py     # Matplotlib/seaborn visualisations
-│
-├── data/
-│   ├── raw/                      # Raw Bright Data JSON snapshots
-│   ├── parsed/
-│   │   ├── citations.csv         # One row per citation, includes cited_sentence
-│   │   ├── answers.csv           # One row per query/answer
-│   │   └── source_pages.csv      # Source page positional data
-│   └── analysis/
-│       ├── summary_stats.json
-│       ├── positional_distribution.csv
-│       ├── domain_frequency.csv
-│       ├── platform_overlap.csv
-│       └── category_breakdown.csv
-│
-├── notebooks/
-│   ├── 01_methodology.ipynb
-│   └── 02_findings.ipynb
-│
-├── reports/                      # Generated charts (PNG)
-│
-└── article/
-    ├── article.md                # Full LinkedIn article
-    └── diagrams/                 # Mermaid source files
-```
-
----
-
-## Key Data Schema
-
-### `citations.csv` (primary output)
+### `citations.csv`
 
 | Column | Description |
-|--------|-------------|
-| `platform` | `ai_mode` or `gemini` |
-| `query` | The search query |
-| `citation_url_raw` | Full URL including `#:~:text=` fragment |
-| `citation_url_clean` | URL without fragment |
-| `domain` | Cited domain |
-| `has_text_fragment` | Boolean — does URL contain `#:~:text=`? |
-| `cited_sentence` | **Decoded sentence Google cited** |
-| `cited_sentence_word_count` | Word count of cited sentence |
-| `fragment_raw` | Raw (URL-encoded) fragment |
-| `cited_flag` | Boolean from Bright Data — marked as citation |
+|---|---|
+| `query` | Search query |
+| `platform` | ai_mode / gemini / chatgpt / perplexity / copilot / grok |
+| `url` | Cited URL |
+| `domain` | Extracted domain |
+| `fragment` | Raw `#:~:text=` fragment (Gemini only, May 2026) |
+| `cited_text` | Decoded cited sentence (where fragment available) |
+| `answer_id` | Foreign key to answers.csv |
 
-### `source_pages.csv` (after step 04)
+### `serp.csv`
 
 | Column | Description |
-|--------|-------------|
-| `found` | Boolean — cited sentence located in page |
-| `block_index` | Element index where sentence was found |
-| `block_total` | Total elements in page |
-| `relative_position` | `block_index / block_total` (0 = top, 1 = bottom) |
-| `page_word_count` | Total word count of source page |
-| `has_structured_content` | Page contains `<ul>`, `<ol>`, or `<table>` |
+|---|---|
+| `query` | Search query |
+| `url` | Organic result URL |
+| `rank` | Position 1-10 |
+| `domain` | Extracted domain |
 
 ---
 
-## Research Questions & Hypotheses
+## Prior Study
 
-| # | Hypothesis | Test |
-|---|-----------|------|
-| H1 | Cited sentences cluster in the top 30% of documents | One-sample t-test, mean position < 0.5 |
-| H2 | Cited sentences are shorter than average page text | Descriptive statistics, histogram |
-| H3 | Structured pages (lists/tables) are cited more | Chi-square test |
-| H4 | AI Mode and Gemini cite overlapping but distinct URLs | Jaccard similarity |
-| H5 | Sentence length varies by query category | One-way ANOVA |
+March 2026 (42,971 citations, 520 queries, Google AI Mode only): [grounding-citation-analysis](https://github.com/danishashko/grounding-citation-analysis)
 
 ---
 
-## Comparison to Prior Research
+## Citation
 
-| Study | Sample | Granularity | Method | This Study's Advance |
-|-------|--------|-------------|--------|----------------------|
-| Ahrefs (2024) | 1.9M citations | Page level | Custom crawler | Sentence-level decoding |
-| Surfer SEO (2024) | 46M citations | Domain level | API collection | Real SERP; positional data |
-| Seer Interactive (2024) | Variable | Query level | Gemini API | Within-page position |
-| DEJAN AI (2024) | Conceptual | Theoretical | Manual + LLM | Empirical validation |
-| **This study** | 100+ queries | **Sentence level** | Bright Data + `#:~:text=` | — |
+```
+Shashko, D. (May 2026). AI Citation Patterns: 153,425 citations across 6 AI platforms.
+https://github.com/danishashko/ai-citation-patterns
+```
 
 ---
 
-## Bright Data API Reference
+## License
 
-**AI Mode Scraper**
-- Dataset ID: `gd_mcswdt6z2elth3zqr2`
-- Endpoint: `POST https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_mcswdt6z2elth3zqr2`
-- Input: `[{"url": "https://www.google.com/search?udm=50", "prompt": "...", "country": "US"}]`
-- Output includes `citations[].url` with `#:~:text=` fragments
-
-**Why not the Gemini API?**
-Surfer SEO's research found that the Gemini developer API returns different answers from the actual Google Search AI Mode SERP. Bright Data's scraper hits the real `google.com/search?udm=50` endpoint via residential proxies.
-
----
-
-## Licence
-
-MIT — see [LICENSE](LICENSE). Cite this repo if you use the methodology.
-
----
-
-## Author
-
-[Your Name] | [Your LinkedIn] | [Your Website]
-
-*Accompanying article: [How Google Actually Chooses Which Sentences to Cite in AI Mode](article/article.md)*
+MIT

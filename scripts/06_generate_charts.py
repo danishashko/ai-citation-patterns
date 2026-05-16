@@ -16,6 +16,12 @@ Usage:
 """
 
 import os
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    _sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 from pathlib import Path
 
 import matplotlib.pyplot as plt

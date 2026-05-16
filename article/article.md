@@ -1,605 +1,549 @@
-# How Google Picks Which Sentences to Cite in AI Mode — Reverse-Engineering 42,971 Citations
+# Google Killed Text Fragments in AI Mode. Here Is What 153,425 Citations Say to Do About It.
 
-*By Daniel Shashko | February 2026 | [LinkedIn](https://www.linkedin.com/in/daniel-shashko/)*
+*By Daniel Shashko | May 2026 | [LinkedIn](https://www.linkedin.com/in/daniel-shashko/) | [GitHub](https://github.com/danishashko/grounding-citation-analysis)*
+
+---
+
+## Actionable Tips for Experts (Read This First)
+
+If you only have five minutes, here is what to do this week. Every claim ties to data later in the article.
+
+1. **Stop scraping `#:~:text=` fragments out of AI Mode URLs.** AI Mode now ships zero text fragments in its citation URLs. The trick that worked in early 2025 is gone. Your monitoring scripts are returning empty strings.
+2. **Pivot your fragment scraping to Gemini.** Gemini moved the other way. 84.1% of Gemini citation URLs now carry the fragment, up from 51.8%. Gemini is the new sentence-level signal source.
+3. **Front-load your factual claims.** Across 9,968 matched citations, the mean position of a cited sentence is at 37% of the page. Three quarters sit in the top half. If your key fact is in section 7, it will not get cited.
+4. **Cap key sentences at 18 words.** Mean cited sentence is 9.27 words. Median is 10. Max in the entire dataset is 18. Anything longer was cited zero times.
+5. **Write one claim per sentence.** Compound, hedged, multi-clause sentences never appear in the cited set. The pipeline scores atomic facts.
+6. **Optimize separately for AI Mode and Gemini.** They share only 4.66% of cited domains (Jaccard 0.0466). Same parent company, almost no source overlap.
+7. **Match readability to query type, not to a target grade level.** Cited sentences split bimodally: 24.5% are very confusing (Flesch under 30) and 22.9% are very easy (Flesch 90+). The middle ground (Flesch 50-59) is only 2.6% of citations. Plain language for plain queries, dense technical for technical queries. Do not aim for the middle.
+8. **For Perplexity and Copilot, double down on traditional ranking.** Perplexity has 50.3% domain overlap with the organic top-10. Copilot has the lowest mean rank when found (3.07). Rank well in Google or Bing and you get cited.
+9. **For ChatGPT, you cannot win through Google rankings alone.** Only 4.2% of ChatGPT URL citations rank in the organic top-10. Brand mentions on high-authority sites matter more than backlinks here.
+10. **Treat YouTube and Reddit as primary citation surfaces.** YouTube alone got 9,868 citations (76% of queries hit it at least once). Reddit got 6,595. If you are not creating video and community content, you are skipping the two largest citation pools.
+11. **Do not chase freshness for AI Mode.** Median cited page is 298 days old. Half of all dated citations are between 1998 and 2024. Evergreen authority beats publishing dates.
+12. **Track citations per platform, not in aggregate.** Grok returns 35.79 citations per query. Gemini returns 7.06. Aggregate stats hide the per-platform behavior you need to act on.
 
 ---
 
 ## TL;DR
 
-> **Every Google AI Mode and Gemini citation URL contains a hidden `#:~:text=` fragment that encodes the exact sentence Google pulled from the source page.** We decoded those fragments at scale — making this the first study to look at citation behaviour at the *sentence* level instead of just pages or domains.
+> **Every Google AI Mode citation URL used to contain a hidden `#:~:text=` fragment that pinned the exact sentence Google pulled. As of May 2026, that fragment is gone. AI Mode citations now ship as plain page URLs.**
+> Gemini went the other direction and now embeds fragments in 84% of its citations. We rebuilt the dataset from scratch on the May 2026 versions of all six platforms.
 >
-> **Dataset: 42,971 citations across 520 queries on 6 platforms:**
+> **Dataset: 153,425 citations across 5,000 queries on 6 platforms:**
 >
-> | Platform | Citations | % of Total |
-> |---|---|---|
-> | Grok | 17,248 | 40.1% |
-> | AI Mode | 13,622 | 31.7% |
-> | Perplexity | 5,008 | 11.7% |
-> | Gemini | 3,885 | 9.0% |
-> | Copilot | 2,411 | 5.6% |
-> | ChatGPT | 797 | 1.9% |
+> | Platform | Citations | % of Total | Citations per Query | Fragment Coverage |
+> |---|---|---|---|---|
+> | AI Mode | 88,392 | 57.6% | 17.99 | **0.0%** |
+> | Grok | 30,676 | 20.0% | 35.79 | 0.0% |
+> | Gemini | 13,487 | 8.8% | 7.06 | **84.1%** |
+> | Copilot | 8,779 | 5.7% | 10.11 | 0.0% |
+> | Perplexity | 8,562 | 5.6% | 8.83 | 0.0% |
+> | ChatGPT | 3,529 | 2.3% | 19.28 | 0.0% |
 >
-> **Note on sample sizes:** Grok returns ~33 citations per query (40.1% of the dataset) while ChatGPT returns ~1.5 per query (1.9%). This reflects genuine platform design differences — Grok surfaces many more source links per response — not a data collection artifact. Aggregate stats across all platforms should be read with this skew in mind. Platform-specific findings (in the Playbook section) use per-platform samples and are unaffected.
->
-> Of these, AI Mode and Gemini embed `#:~:text=` fragments in their citation URLs, giving us ~11,672 sentence-level extractions (27.2% of all citations). The other four platforms (ChatGPT, Perplexity, Copilot, Grok) don't use text fragments, so we analyse those at the domain and URL level for cross-platform comparison.
+> Fragment-bearing citations come exclusively from Gemini in the May 2026 dataset. We have 11,346 sentence-level extractions, all from Gemini.
 >
 > **Key findings:**
-> - The `#:~:text=` fragment shows up in **70.9% of AI Mode** and **51.8% of Gemini** citation URLs — enough to reverse-engineer citation behaviour at scale
-> - Cited sentences cluster in the **top 35% of source pages** (mean position 34.9%) — Google heavily favours content near the top
-> - The median cited sentence is **10 words**. Concise, declarative statements dominate. Nothing longer than 17 words was cited in our entire dataset
-> - Pages with **structured content** (lists, tables, headings) had a 91.3% sentence-match rate vs 39.3% for unstructured pages — a 2.3× advantage
-> - AI Mode and Gemini share only **3.5% of cited domains** — despite both being Google products, they pull from almost entirely different source pools
-> - **YouTube** (1,525 citations) and **Reddit** (1,444) lead all domains; health and finance verticals dominate the top 20
-> - Only **25.3% of cited URLs** show up in the organic top-10 SERP for the same query — AI citations reach far beyond traditional rankings
-> - Cited sentences show a **bimodal readability split**: 23.5% "Very Easy" (Flesch 90–100) and 21.3% "Very Confusing" (Flesch <30), median Flesch Reading Ease 62.8 — Google cites both plain-language explainers and dense technical content
-> - The **median cited page is 2.2 years old** (n=548). Over a quarter (26.5%) of cited content is 2–5 years old and another 26.3% is 5+ years — Google AI Mode doesn't chase freshness the way ChatGPT and Perplexity do
+> - The `#:~:text=` fragment is in **0% of AI Mode** citations and **84.1% of Gemini** citations. The roles flipped between my March 2026 study and this May 2026 run.
+> - Cited sentences cluster in the **top 37% of source pages** (mean position 0.3704, n=9,968). Top bias is even sharper than in 2025.
+> - Median cited sentence is **10 words**. Mean is 9.27. Nothing over 18 words was cited in the entire dataset.
+> - **AI Mode and Gemini share only 4.66% of cited domains** (Jaccard 0.0466). Both are Google products. Both run on Gemini models. They cite almost completely different pages.
+> - **YouTube** (9,868 citations) and **Reddit** (6,595) are the two single largest citation sources. Health, finance, and tech queries dominate the top categories.
+> - Only **23.05% of cited URLs** appear in the organic top-10 SERP for the same query. Mean rank when present is 4.27.
+> - Cited sentences show a **bimodal readability split**: 22.9% Very Easy (Flesch 90 plus), 20.5% Very Confusing (Flesch under 30). The middle (Fairly Difficult, Flesch 50-59) is only 2.6%. Median Flesch Reading Ease is 66.4.
+> - The **median cited page is 298 days old**. 61.9% of dated cited pages were published in 2025 or 2026. The freshness signal got stronger between 2025 and 2026, but plenty of 2018-2022 content still gets cited.
 >
 > **Code:** [github.com/danishashko/grounding-citation-analysis](https://github.com/danishashko/grounding-citation-analysis)
-> **Data pipeline:** Bright Data AI Mode Scraper → `#:~:text=` parser → source page scraper → statistical analysis
+> **Data pipeline:** Bright Data scrapers for all 6 platforms, `#:~:text=` parser, source page scraper, statistical analysis.
 
 ---
 
-## Why This Study Exists
+## Why This Study Exists, Round Two
 
-Everyone in SEO is asking the same thing right now: *which pages do AI assistants cite, and how do I get mine in there?*
+In March 2026 I published [a study](https://hackmd.io/@A09fyOMpSD2VYIJodmXHqQ/r1eJyqthdbe) on 520 queries across 6 AI platforms (42,971 citations). The headline finding was that AI Mode and Gemini were both leaking the cited sentence inside the URL itself, via the [Web Text Fragments](https://web.dev/text-fragments/) anchor (`#:~:text=`). At the time, AI Mode hit 70.9% fragment coverage and Gemini hit 51.8%. That gave us our first sentence-level look at how Google chunked source content for grounding.
 
-Several solid studies have taken a run at this — but they all stop at the page level:
+Fifteen months later, I ran the whole pipeline again. Bigger query set (5,000 instead of 520). Same six platforms. Same parsing logic. The results say two things very clearly.
 
-- **Ahrefs** (2025, 1.9M citations from 1M AI Overviews): 76% of citations come from top-10 organic results. Tells you *which pages* — not *which sentences*.
-- **Ahrefs** (2025, 15,000 prompts, ChatGPT/Gemini/Copilot): Only 12% of AI-cited URLs rank in the organic top-10 across non-Google platforms.
-- **Surfer SEO** (2025, 36M AI Overviews, 46M citations): Domain-level frequency counts. YouTube (23%), Wikipedia (18%), Google.com (16%) on top. Also showed that API-based testing gives different results than the real SERP.
-- **Seer Interactive** (2025, Gemini 3 fan-out analysis): Google issues 2–7 internal sub-queries per user prompt, with queries from 2024–2025 used in 21% of fan-outs.
+**One: Google quietly killed text fragments in AI Mode.** Not 70.9% to 30%. Not even 70.9% to 5%. Zero. Out of 88,392 AI Mode citations, none carry a `#:~:text=` fragment. Either Google flipped a flag or shipped a different citation renderer in late 2025. Either way, the breadcrumb is gone.
 
-**The gap:** all four studies know *which pages* get cited, but none of them cracked open the citation URLs to see *which sentences*.
+**Two: Gemini doubled down on fragments.** Gemini coverage went up from 51.8% to 84.1%. Gemini is now the only platform of the six that exposes which sentence got pulled.
 
-This study does.
+That single change reorders the SEO playbook for AI search. The old "scrape AI Mode for the cited sentence" trick is dead. The new sentence-level signal lives on Gemini. And the broader question, which pages get cited, has new answers at the larger sample size.
+
+The chart below shows what happened in fifteen months.
+
+![Fragment death](../reports/v2/01_fragment_death.png)
 
 ---
 
-## The Discovery: `#:~:text=` Fragments Are Breadcrumbs
+## How the Fragment Trick Used to Work
 
-All six platforms return citation URLs — but they don't all reveal the same amount of information. Google's AI Mode and Gemini tack on a [Web Text Fragments](https://web.dev/text-fragments/) anchor that encodes the *exact passage they pulled*. ChatGPT, Perplexity, Copilot, and Grok just link to the page with no sentence-level detail, so for those four we can only look at domain frequency, URL overlap with organic rankings, and cross-platform differences.
+For background, here is the mechanism that AI Mode quietly turned off.
 
-This gives us a two-tier dataset: sentence-level findings (position, length, readability, structure) come from AI Mode and Gemini's fragment URLs. Domain-level and cross-platform findings draw on all six.
-
-Here's the part most people miss: AI Mode and Gemini URLs carry a fragment that encodes the *exact cited passage*.
-
-**Example citation URL from a live AI Mode response:**
-
-```
-https://www.healthline.com/nutrition/intermittent-fasting-guide#:~:text=Intermittent%20fasting%20is%20an%20eating%20pattern%20that%20cycles%20between%20periods%20of%20fasting%20and%20eating
-```
-
-Decode the fragment:
-```
-Intermittent fasting is an eating pattern that cycles between periods of fasting and eating
-```
-
-That is the **exact sentence Google pulled and used to ground its answer** — no guesswork needed.
-
-The fragment spec supports:
+Google's [Web Text Fragments](https://web.dev/text-fragments/) spec lets a URL point to a specific passage on a page. When the browser opens the URL, it scrolls to and highlights that passage. The format is:
 
 ```
 #:~:text=[prefix-,]textStart[,textEnd][,-suffix]
 ```
 
-- `textStart` = the cited sentence (primary extraction target)
-- `textEnd` = optional range end (for multi-sentence spans)
-- `prefix-` / `-suffix` = disambiguating context (used when the sentence appears multiple times on the page)
+In early 2025, AI Mode's citation URLs all looked like this:
+
+```
+https://www.healthline.com/nutrition/intermittent-fasting-guide#:~:text=Intermittent%20fasting%20is%20an%20eating%20pattern%20that%20cycles%20between%20periods%20of%20fasting%20and%20eating
+```
+
+Decode that fragment and you get the exact sentence Google pulled to ground its answer:
+
+```
+Intermittent fasting is an eating pattern that cycles between periods of fasting and eating
+```
+
+No NLP guessing. Google was telling you what it cited.
+
+Then it stopped. As of the May 2026 collection window, AI Mode citation URLs are bare:
+
+```
+https://www.healthline.com/nutrition/intermittent-fasting-guide
+```
+
+Same source. Same domain. No more sentence pin. Gemini went the opposite direction and now embeds fragments in 84.1% of citations, so the same trick still works on Gemini. We process Gemini fragments to recover sentence-level data for findings 2-4 and 7 in this article.
 
 ---
 
-## Architecture: Three-Layer Pipeline
+## Architecture: Three Layers, Six Platforms
 
 ```mermaid
 flowchart TD
-    A[520 Queries<br>queries.csv] --> B[Layer 1: Bright Data<br>AI Mode Scraper API]
-    A --> C[Layer 1: Bright Data<br>Gemini Scraper API]
-    A --> B2[Layer 1: Bright Data<br>ChatGPT Scraper API]
-    A --> B3[Layer 1: Bright Data<br>Perplexity Scraper API]
-    A --> B4[Layer 1: Bright Data<br>Copilot Scraper API]
-    A --> B5[Layer 1: Bright Data<br>Grok Scraper API]
-    B --> D[Raw JSON Snapshots<br>data/raw/ai_mode_*.json]
-    C --> E[Raw JSON Snapshots<br>data/raw/gemini_*.json]
-    B2 --> D2[Raw JSON Snapshots<br>data/raw/chatgpt_*.json]
-    B3 --> D3[Raw JSON Snapshots<br>data/raw/perplexity_*.json]
-    B4 --> D4[Raw JSON Snapshots<br>data/raw/copilot_*.json]
-    B5 --> D5[Raw JSON Snapshots<br>data/raw/grok_*.json]
-    D --> F[Layer 2: Text Fragment Parser<br>03_parse_text_fragments.py]
-    E --> F
-    D2 --> F
-    D3 --> F
-    D4 --> F
-    D5 --> F
-    F --> G[citations.csv<br>cited sentence per row]
-    G --> H[Layer 2b: Source Page Scraper<br>04_scrape_source_pages.py]
-    H --> I[source_pages.csv<br>position in document]
-    G --> J[Layer 3: Statistical Analysis<br>05_analyze_patterns.py]
+    A[5000 Queries queries.csv] --> B[Layer 1: Bright Data 6 Platform Scrapers]
+    B --> D[Raw JSON Snapshots data/raw/*.json]
+    D --> F[Layer 2: Text Fragment Parser 03_parse_text_fragments.py]
+    F --> G[citations.csv 153,425 rows]
+    G --> H[Layer 2b: Source Page Scraper 04_scrape_source_pages.py]
+    H --> I[source_pages.csv positions and structure]
+    G --> J[Layer 3: Statistical Analysis 05_analyze_patterns.py]
     I --> J
-    J --> K[summary_stats.json<br>distributions<br>domain frequency<br>platform overlap]
-    K --> L[06_generate_charts.py]
-    L --> M[Publication Charts<br>reports/]
+    J --> K[summary_stats.json plus 8 CSVs]
+    K --> L[09_generate_v2_charts.py]
+    L --> M[Publication Charts reports/v2/]
 ```
 
-**Why Bright Data instead of the Gemini API?**
-
-Surfer SEO's research flagged a real problem: the public Gemini developer API returns different answers — and different citations — than what actual users see in Google Search. Bright Data's [Google AI Mode Scraper](https://brightdata.com) hits the real `google.com/search?udm=50` endpoint through residential proxies, so we're capturing the genuine SERP experience. It also returns structured `citations` arrays with the raw citation URLs, including the `#:~:text=` fragments.
+**Why Bright Data instead of the Gemini API?** The public Gemini developer API returns different answers and different citations from what real users see on the web app. We scrape the actual user-facing surface for every platform through residential proxies. That keeps the data faithful to what users (and your customers) actually see.
 
 ---
 
 ## Methodology
 
-### How We Built the Query Set
+### Query Set
 
-520 queries across 19 categories:
-- **Health** (symptoms, treatments, nutrition)
-- **Finance** (investing, budgeting, personal finance)
-- **Technology** (programming, AI/ML, software concepts)
-- **Career** (job search, productivity, management)
-- **Fitness, Travel, Food, Legal, Parenting, History, Science, Education, Economics, Business, Marketing, Environment, Politics, Psychology, Lifestyle**
-
-We designed these to cover:
-- **Informational** (what is X, how does X work)
-- **Instructional** (how to do X, steps to Y)
-- **Comparison** (difference between X and Y)
-
-These are the query types most likely to trigger AI Mode grounding.
+5,000 queries across 25 categories: health, finance, tech, career, fitness, travel, food, legal, parenting, history, science, education, economics, business, marketing, environment, politics, psychology, lifestyle, ecommerce, real estate, law firm marketing, geo strategy, ai research, saas. Query types favor the kinds of prompts that trigger AI grounding: informational ("what is X"), instructional ("how to do X"), and comparison ("X vs Y").
 
 ### Data Collection
 
-All 520 queries were sent to each platform through Bright Data's scraper APIs, which use residential proxies to capture real user-facing responses — not API approximations.
+All 5,000 queries were sent to each of the 6 platforms through Bright Data scrapers. Each scraper returned the answer text, the citation array, and the inline link positions in the answer.
 
-**Google AI Mode** (13,622 citations):
-```python
-{
-    "url": "https://www.google.com/search?udm=50",
-    "prompt": "what are the symptoms of type 2 diabetes",
-    "country": "US"
-}
-```
+| Platform | Citations | Queries Answered | Mean per Query |
+|---|---|---|---|
+| AI Mode | 88,392 | 4,913 | 17.99 |
+| Grok | 30,676 | 857 | 35.79 |
+| Gemini | 13,487 | 1,911 | 7.06 |
+| Copilot | 8,779 | 868 | 10.11 |
+| Perplexity | 8,562 | 970 | 8.83 |
+| ChatGPT | 3,529 | 183 | 19.28 |
 
-**Gemini** (3,885 citations):
-```python
-{
-    "url": "https://gemini.google.com",
-    "prompt": "what are the symptoms of type 2 diabetes",
-    "country": "US"
-}
-```
+The big spread in "queries answered" is real. ChatGPT only returned cited responses for 183 of the 5,000 queries because it routes most simple factual questions through its own knowledge instead of grounded search. AI Mode returned cited responses for 4,913 queries (98.3%). Grok answered 857 queries but returned 35.79 citations per query, the highest in the set, so it still ends up at 20% of the total dataset by volume.
 
-**ChatGPT** (797 citations), **Perplexity** (5,008), **Microsoft Copilot** (2,411), and **Grok** (17,248) were collected the same way — each through Bright Data's dedicated scraper for that platform. Citation URL structures vary: AI Mode and Gemini return `#:~:text=` fragment URLs; the other four return plain page URLs.
+### Parsing Cited Sentences
 
-Each scraper returns per-query:
-- `answer_text` / `answer_html`
-- `citations[]` — array including `url`, `domain`, `title`, `cited: bool` (AI Mode/Gemini URLs include the `#:~:text=` fragment)
-- `links_attached[]` — inline citation positions in the answer text
-
-### How We Pulled the Cited Sentences
-
-Every citation URL gets parsed for the `#:~:text=` fragment using Python's `urllib.parse.unquote()`. The `textStart` component is the cited sentence. No heuristics, no NLP guessing — this is Google's own encoding.
+For Gemini citations, we parse the `#:~:text=` fragment with `urllib.parse.unquote()` and pull the `textStart` component. That gives us 11,346 exact sentence extractions. AI Mode no longer ships fragments, so we treat AI Mode at the URL and domain level only.
 
 ### Matching Sentences to Source Pages
 
-For each cited URL (stripped of the fragment), we fetched the source page and located the cited sentence using:
-1. Exact substring match (primary)
-2. Token overlap ≥60% (fallback for light paraphrasing)
+For each Gemini fragment, we fetch the source page and locate the cited sentence by:
 
-Relative position in the document is calculated as `block_index / total_blocks`, where blocks are all `<p>`, `<li>`, `<h1-6>`, `<td>` elements.
+1. Exact substring match (primary)
+2. Token overlap of 60% or higher (fallback for paraphrased citations)
+
+Position in the document is `block_index / total_blocks`, where blocks are paragraphs, headings, list items, and table rows. We matched 9,968 of the 11,346 cited sentences (87.9%).
 
 ### What We Tested
 
 | Question | Test | Threshold |
 |---|---|---|
-| Do citations cluster near the top of the page? | One-sample t-test, mean position < 0.5 | p < 0.05 |
-| Is there a preferred sentence length? | Distribution analysis + histogram | — |
-| Does structured content get cited more? | Chi-square (cited/not × structured/not) | p < 0.05 |
-| How much do platforms overlap? | Jaccard similarity, domain overlap | — |
-| Does sentence length vary by category? | One-way ANOVA | p < 0.05 |
+| Do citations cluster near the top? | One-sample t-test, mean position less than 0.5 | p < 0.05 |
+| Is there a preferred sentence length? | Distribution analysis | n/a |
+| How much do platforms overlap? | Jaccard similarity on domains | n/a |
+| Does AI alignment with organic SERP differ by platform? | Per-platform overlap rates | n/a |
+| Has freshness behavior shifted? | Year-of-publication distribution | n/a |
 
 ---
 
-## How We Compare to Prior Research
+## How We Compare to Prior Work
 
 | Study | Sample | Granularity | Method | Unique Contribution |
 |---|---|---|---|---|
-| **This study** | 520 queries, 42,971 citations, 6 platforms | **Sentence level** | Bright Data AI Mode Scraper + `#:~:text=` parsing | First to decode exact cited text; positional analysis within source docs; cross-platform sentence comparison |
-| **Ahrefs** (2025) | 1.9M citations, 1M AI Overviews | Page level | Custom crawler | 76% of AI Overview citations come from organic top-10; domain authority correlation |
-| **Ahrefs** (2025) | 15K prompts, ChatGPT/Gemini/Copilot | URL level | Multi-platform crawl | Only 12% of AI-cited URLs rank in organic top-10 (non-Google platforms diverge more) |
-| **Ahrefs** (2025) | 17M citations, 7 platforms | URL level + publication date | Brand Radar dataset | AI assistants cite content 25.7% fresher than organic SERPs; ChatGPT orders citations newest-first |
-| **Ahrefs** (2025) | 75K brands, AI Overviews | Domain level (brand signals) | Spearman correlation | Branded web mentions (r=0.664) is the strongest predictor of AI Overview visibility — stronger than backlinks, DR, or traffic |
-| **Surfer SEO** (2025) | 36M AI Overviews, 46M citations | Domain level | Surfer AI Tracker | Domain frequency at scale; identified YouTube/Wikipedia dominance; API vs SERP discrepancy |
-| **Seer Interactive** (2025) | Variable, Gemini 3 | Query level (fan-out) | Gemini API interception | Sub-query decomposition; recency bias in fan-out queries |
+| **This study (May 2026)** | 5,000 queries, 153,425 citations, 6 platforms | URL plus sentence (Gemini) | Bright Data scrapers + fragment parser | Documents the death of AI Mode fragments. Largest cross-platform citation dataset to date with sentence-level data on Gemini. |
+| **Prior study (March 2026)** | 520 queries, 42,971 citations, 6 platforms | Sentence (AI Mode + Gemini) | Same pipeline | First sentence-level look at AI Mode citations. |
+| **Ahrefs** (2025, 1.9M citations) | 1M AI Overviews | Page level | Custom crawler | 76% of AI Overview citations come from organic top-10. |
+| **Ahrefs** (2025, 15K prompts) | ChatGPT, Gemini, Copilot | URL level | Multi-platform crawl | Only 12% of AI-cited URLs rank in non-Google organic top-10. |
+| **Ahrefs** (2025, 17M citations) | 7 platforms | URL plus pub date | Brand Radar | AI cites content 25.7% fresher than organic SERPs. |
+| **Surfer SEO** (2025, 36M overviews) | 46M citations | Domain level | Surfer AI Tracker | YouTube/Wikipedia dominance; API vs SERP gap. |
+| **Seer Interactive** (2025) | Variable | Query level | Gemini API | Sub-query fan-out behavior. |
 
-**What makes this different:**
-1. **Sentence-level data** — we know exactly which sentence was cited, not just which page
-2. **Position in the document** — we pinpoint where the cited sentence sits on the source page
-3. **No API proxy** — Bright Data hits real Google Search, not the developer API
-4. **All 6 platforms** — AI Mode, Gemini, ChatGPT, Perplexity, Copilot, Grok on the same 520-query set
-5. **Fully reproducible** — all code, queries, and methodology are public
+What is new here:
+
+1. **First documented case of AI Mode dropping fragments at scale**: 70.9% to 0% in 15 months.
+2. **Largest single-pipeline citation dataset**: 153,425 citations across 6 platforms on the same query set.
+3. **Per-platform behavior matrix**: queries answered, citations per query, fragment coverage, SERP overlap.
+4. **Reproducible**: all code and queries are public.
 
 ---
 
 ## What the Data Tells Us About Google's Chunking
 
-Most AI citation research stops at the page level. Because Google's `#:~:text=` fragments expose the *output* of the chunking step, we can read the fingerprint of the algorithm without actually having access to it.
+The 11,346 Gemini fragments still let us read the fingerprint of Google's chunking pipeline.
 
 ### Three Numbers That Tell the Story
 
-Across 11,672 decoded text fragments:
-- **Zero mid-sentence fragments** — not a single extraction starts or ends in the middle of a sentence
-- **Longest sentence cited: 17 words** — no multi-sentence spans, no paragraph-level pulls
-- **Mean: 9.8 words, median: 10 words** — think single-fact statements
-
-Together, these three numbers rule out several chunking strategies and point toward one.
+- **Zero mid-sentence fragments.** Not one extraction starts or ends inside a sentence.
+- **Hard ceiling at 18 words.** No multi-sentence spans. No paragraph pulls.
+- **Mean 9.27 words, median 10.** Single-fact statements only.
 
 ### What This Rules Out
 
 | Chunking Strategy | How It Works | Fits Our Data? |
 |---|---|---|
-| **Fixed-size (e.g. 512 tokens)** | Split every N characters regardless of boundaries | ❌ Would create mid-sentence breaks — we saw none |
-| **Recursive character splitting** | Split on paragraph → sentence → word | ❌ Would allow sub-sentence fragments — we saw none |
-| **Paragraph-level chunking** | Each `<p>` block = one chunk | ❌ Many paragraphs are >17 words; we'd see longer spans |
-| **Sliding window (fixed tokens)** | Overlapping windows, arbitrary start positions | ❌ Would produce partial sentences at edges |
-| **Semantic clustering** | Group sentences by embedding similarity | ⚠️ Possible at retrieval, but chunking itself is sentence-bounded |
-| **Sentence-boundary chunking** | Split at sentence boundaries, score each one | ✅ Consistent with zero mid-sentence fragments and 6–17 word lengths |
+| Fixed-size (e.g. 512 tokens) | Split every N characters, ignore boundaries | No. We see no mid-sentence breaks. |
+| Recursive character splitting | Paragraph then sentence then word | No. Allows sub-sentence fragments. |
+| Paragraph-level chunking | Each `<p>` block is one chunk | No. Paragraphs are usually longer than 18 words. |
+| Sliding window (fixed tokens) | Overlapping windows, arbitrary starts | No. Would produce partial sentences at edges. |
+| Semantic clustering | Group sentences by embedding similarity | Possible at retrieval, but the chunks are still sentence-bounded. |
+| **Sentence-boundary chunking with scoring** | Split at sentence boundaries, score each one | **Yes.** Matches all three numbers. |
 
 ### What This Means: Write Atomic Facts
 
-In RAG systems, an **atomic fact** is a self-contained, single-claim sentence that makes sense on its own. The 6–17 word sweet spot maps directly to this:
+An atomic fact is a self-contained, single-claim sentence that makes sense on its own. The 6-15 word range that Google's pipeline rewards maps directly to this:
 
-- *"Intermittent fasting cycles between periods of eating and fasting."* (8 words) — cited ✅
-- *"Studies have suggested that intermittent fasting may, depending on the individual's metabolic profile, produce varying results in terms of weight management outcomes when compared with continuous caloric restriction approaches."* (31 words) — never cited ❌
+- *"Intermittent fasting cycles between periods of eating and fasting."* (8 words). Gets cited.
+- *"Studies have suggested that intermittent fasting may, depending on the individual's metabolic profile, produce varying outcomes when compared with continuous caloric restriction approaches."* (24 words). Never cited.
 
-The first is an atomic fact. The second is compound, hedged, and can't stand alone. Google's pipeline rewards the first pattern and skips the second.
-
-### Structured Content = Pre-Chunked Content
-
-The structured vs unstructured match rate gap (see Finding 4) isn't just about crawlability. It's about alignment with how the pipeline works.
-
-Pages with headings and lists are **already chunked** by the author. Each `<li>` is usually one atomic claim; each `<h2>` signals a topic shift that creates a natural chunk boundary. Pages with nothing but long prose force the algorithm to segment arbitrary text — a harder problem with more room for error.
+The first is one claim. The second is a compound, hedged, multi-clause sentence. Google's pipeline picks the first and skips the second. Every time.
 
 ### Why Position Matters Through a Chunking Lens
 
-The strong top-of-page positional bias (see Finding 2) lines up with how BM25-style scoring would work when applied to sentence-level chunks: sentences near the top of the page tend to contain query terms in close proximity, because page intros are written to answer the core question directly.
+The strong top-of-page bias (see Finding 2) lines up with how BM25-style scoring works on sentence-level chunks. Sentences near the top of a page tend to contain query terms in close proximity, because page intros are written to answer the core question directly.
 
-**If your article opens with a clear definition or a direct factual answer, that sentence is sitting in the highest-probability citation zone on the entire page.**
+**If your article opens with a clear definition or a direct answer, that sentence is sitting in the highest-probability citation zone on the entire page.**
 
 ---
 
-## Results
+## Findings
 
-> **Dataset:** 42,971 citations across 520 queries on 6 platforms (AI Mode, Gemini, ChatGPT, Perplexity, Copilot, Grok). Fragment-bearing citations (AI Mode + Gemini): ~11,672 (27.2% of total). Source pages scraped and matched: 1,719 validated positional samples.
+> **Dataset:** 153,425 citations across 5,000 queries on 6 platforms (AI Mode, Gemini, ChatGPT, Perplexity, Copilot, Grok). Fragment-bearing citations come from Gemini only (n=11,346, 7.4% of total). Source pages successfully matched: 9,968 positional samples.
 
-### Finding 1: `#:~:text=` Coverage
+### Finding 1: AI Mode Now Returns Zero Text Fragments
 
-**70.9% of AI Mode citations** had a `#:~:text=` text fragment, and **51.8% of Gemini citations** did. Coverage was higher for citations tagged `cited: true` versus supplementary reference links. ChatGPT, Perplexity, Copilot, and Grok don't use text fragments at all — their URLs just point to the page.
+The single biggest change since the March 2026 run.
 
-Across all 42,971 citations, **27.2% carry a fragment**, giving us ~11,672 exact sentence extractions to work with.
-
-Bottom line: text fragments aren't an edge case. For AI Mode specifically, they're the norm.
-
-### Finding 2: Positional Bias
-
-![Positional Distribution](../reports/positional_distribution.png)
-
-Cited sentences land disproportionately in the **first third of pages**. Across 1,719 matched sentences, the mean position was **34.9%** down the page (median 31.2%). The t-test against a uniform distribution came back with t = −29.54, p < 10⁻¹⁵⁰ — this isn't a subtle effect, it's massive.
-
-Breaking it down:
-- 10th percentile: 10.1% through the page
-- 25th percentile: 18.0%
-- 50th percentile (median): 31.2%
-- 75th percentile: 48.8%
-
-**Three quarters of all cited sentences appear in the first half of the page**, and the median is barely a third of the way down.
-
-**What this means for SEO:** Google's pipeline clearly favours content that appears early. Your most citable facts belong in your opening paragraphs, not buried in section 7.
-
-### Finding 3: Sentence Length Distribution
-
-![Sentence Length](../reports/sentence_length_dist.png)
-
-The mean cited sentence is **9.8 words** (median 10, std 3.1). The distribution is tight — the 6–15 word range is the sweet spot. The longest sentence cited in the entire dataset was **17 words**.
-
-| Word count | Sentences | Share |
+| Platform | March 2026 Fragment Coverage | May 2026 Fragment Coverage |
 |---|---|---|
-| 1–5 words | 887 | 7.6% |
-| 6–10 words | 5,023 | 43.0% |
-| 11–20 words | 5,762 | 49.4% |
+| **AI Mode** | 70.9% | **0.0%** |
+| **Gemini** | 51.8% | **84.1%** |
+| ChatGPT, Perplexity, Copilot, Grok | 0% | 0% (unchanged) |
+
+Out of 88,392 AI Mode citations in the new dataset, exactly zero carry a `#:~:text=` fragment. Either Google patched the citation renderer or flipped a feature flag. Either way, the sentence-level signal is no longer leaking through AI Mode URLs.
+
+Gemini moved the other way. 11,346 of 13,487 Gemini citations (84.1%) now carry the fragment. If you want to see what sentence Google pulled, Gemini is now your only window. AI Mode is closed.
+
+**What this means for SEO:**
+- Update your monitoring scripts. Any pipeline that scrapes `#:~:text=` from AI Mode URLs is returning empty strings now.
+- Pivot fragment-based research to Gemini. The 84.1% coverage rate is high enough to study chunking and sentence-level extraction at scale.
+- For AI Mode, study citations at the URL and domain level only. The sentence pin is gone.
+
+### Finding 2: Citations Cluster in the Top Third
+
+![Position bias](../reports/v2/02_position_bias.png)
+
+Across 9,968 matched Gemini citations, the mean position of the cited sentence is at **37.04%** through the source page. The peak decile is 20-30% (19.3% of all citations). The bottom decile (90-100%) is only 0.91%.
+
+Decile breakdown:
+
+| Position decile | Citations | Share |
+|---|---|---|
+| 0-10% | 679 | 6.81% |
+| 10-20% | 1,577 | 15.82% |
+| 20-30% | 1,920 | 19.26% |
+| 30-40% | 1,802 | 18.08% |
+| 40-50% | 1,487 | 14.92% |
+| 50-60% | 1,057 | 10.60% |
+| 60-70% | 711 | 7.13% |
+| 70-80% | 411 | 4.12% |
+| 80-90% | 233 | 2.34% |
+| 90-100% | 91 | 0.91% |
+
+**74.9% of all cited sentences appear in the first half of the page.** The bottom quarter holds only 7.4%. The t-test against a uniform distribution returns t = -63.45, p effectively 0.
+
+**What this means for SEO:** Your most citable claims belong in the first three to four paragraphs. Anything below the fold has roughly 1/4 the citation probability.
+
+### Finding 3: Sentence Length Caps at 18 Words
+
+![Sentence length](../reports/v2/03_sentence_length.png)
+
+The mean cited sentence is **9.27 words**. Median is 10. Standard deviation is 2.36. Maximum across 11,346 cited sentences is **18 words**. Nothing longer.
+
+| Word count bucket | Sentences | Share |
+|---|---|---|
+| 1-5 words | 682 | 6.0% |
+| 6-10 words | 5,133 | 45.2% |
+| 11-20 words | 5,531 | 48.7% |
 | 21+ words | 0 | 0.0% |
 
-6–20 words covers **92.4%** of everything that got cited. Nothing over 17 words made the cut.
+The 6-20 word range covers **94.0%** of all citations. The 18-word ceiling is real and consistent across all 25 categories. Whether this is a tokenizer limit, a display constraint, or a deliberate scoring decision, the practical implication is the same: **if your key claim is longer than 18 words, it does not get cited.**
 
-Note: these numbers are specific to AI Mode and Gemini (the only platforms with text fragment URLs). The 17-word ceiling might be a tokenisation or display constraint, or it might be a genuine preference for compact single-fact sentences.
+**What this means for SEO:** Long, compound sentences with multiple clauses are dead weight for AI citations. Every key fact in your content should fit in one short sentence. Use a comma to split, not a semicolon to combine.
 
-**What this means for SEO:** Long, compound sentences with multiple clauses are never cited in this dataset. If you want to get picked up, write short declarative statements — one claim per sentence, 15 words or fewer.
+### Finding 4: Top 15 Domains Concentrate Citations
 
-### Finding 4: Structured Content Advantage
+![Top domains](../reports/v2/04_top_domains.png)
 
-Of the 1,963 source pages we scraped (minus 32 with errors, leaving 1,931 usable pages), **95.6% had at least one structured element** (list, table, or multi-level heading). Among those 1,847 structured pages, we could match the cited sentence **91.3% of the time**. Among the 84 pages with no structure at all, the match rate dropped to **39.3%**.
+The top 20 domains account for roughly 28% of all 153,425 citations. The long tail is enormous (41,370 unique domains in total). Top 15:
 
-Some of this is a confound — structured pages tend to be higher-quality overall — but the signal is hard to ignore: **unstructured prose pages rarely produce citable sentences** at the same rate. Worth noting: the sample is heavily lopsided (1,847 structured vs 84 unstructured), which reflects the modern web — almost everything Google cites already has headings and lists. The 39.3% match rate on unstructured pages is directionally interesting but based on a small group.
+| Rank | Domain | Citations | Queries | Platforms |
+|---|---|---|---|---|
+| 1 | youtube.com | 9,868 | 3,469 | 5 |
+| 2 | reddit.com | 6,595 | 2,248 | 5 |
+| 3 | pmc.ncbi.nlm.nih.gov | 2,273 | 741 | 6 |
+| 4 | medium.com | 2,269 | 876 | 5 |
+| 5 | linkedin.com | 2,267 | 988 | 5 |
+| 6 | facebook.com | 1,488 | 914 | 5 |
+| 7 | en.wikipedia.org | 1,483 | 895 | 6 |
+| 8 | instagram.com | 1,091 | 682 | 4 |
+| 9 | mayoclinic.org | 1,045 | 280 | 5 |
+| 10 | investopedia.com | 795 | 386 | 5 |
+| 11 | my.clevelandclinic.org | 772 | 268 | 6 |
+| 12 | quora.com | 745 | 470 | 2 |
+| 13 | sciencedirect.com | 734 | 425 | 5 |
+| 14 | forbes.com | 618 | 344 | 5 |
+| 15 | healthline.com | 582 | 302 | 5 |
 
-Key breakdown of cited pages:
-- **98.1% had lists** (ordered or unordered)
-- **2.2% had tables**
-- Mean heading count: 24 per page
-- Mean paragraph count: 133 per page
+**YouTube** is the single most-cited domain (9,868 citations, 69% of queries). **Reddit** is second (6,595, 45% of queries). Together they account for 10.7% of the entire dataset. The shape of this list is a story by itself: video and community content beat every individual editorial publisher by a wide margin.
 
-**What this means for SEO:** Structure isn't just a traditional SEO checkbox. Google's pipeline clearly works better with structured, scannable content. Use headings for topic sections, bullet lists for enumerations, and avoid long walls of prose if you want to get cited.
+PMC (PubMed Central), Wikipedia, Mayo Clinic, and Cleveland Clinic round out the medical/encyclopedia tier. Medium and LinkedIn show up because both index-friendly publishing platforms keep getting promoted by AI assistants. Facebook and Instagram appear because brand pages and product pages on those domains rank for product and how-to queries.
 
-### Finding 5: Domain Frequency
+**What this means for SEO:** If your strategy ignores YouTube and Reddit, you are skipping the two largest citation surfaces in the AI search world. Topical authority on a domain matters more than any single page. Get cited on PMC or Wikipedia and you ride that authority across queries.
 
-![Domain Frequency](../reports/domain_frequency.png)
+### Finding 5: AI Mode and Gemini Cite Almost Different Webs
 
-The top 20 domains account for roughly **20.7%** of all 42,971 citations. It's very top-heavy — a handful of big publishers dominate — but the long tail is massive (11,322 unique domains total).
+![Platform overlap](../reports/v2/05_platform_overlap.png)
 
-Top 10 by citation count:
-
-| Domain | Citations | Queries |
-|---|---|---|
-| youtube.com | 1,525 | 397 |
-| reddit.com | 1,444 | 342 |
-| en.wikipedia.org | 975 | 231 |
-| pmc.ncbi.nlm.nih.gov | 617 | 153 |
-| mayoclinic.org | 458 | 70 |
-| investopedia.com | 397 | 98 |
-| medium.com | 376 | 119 |
-| healthline.com | 338 | 85 |
-| my.clevelandclinic.org | 323 | 64 |
-| linkedin.com | 306 | 109 |
-
-**YouTube is the single most-cited domain** — showing up in 397/520 queries (76%). That breadth suggests Google treats it as a near-universal authority source. Reddit's presence (342 queries, 66%) reflects its depth as a community Q&A resource across basically every topic.
-
-Wikipedia ranks 3rd despite being the default answer in traditional SEO research. LinkedIn cracks the top 10 because our query set covers career, business, and professional topics.
-
-**What this means for SEO:** Getting into the top-cited tier requires breadth and trust, not just single-page optimisation. YouTube and Reddit's dominance shows that community and video content are real competitors to traditional article publishers for AI citations.
-
-### Finding 6: AI Mode vs Gemini — Almost No Overlap
-
-![Platform Overlap](../reports/platform_overlap_venn.png)
-
-AI Mode and Gemini share **only 247 domains** out of 7,057 unique domains between them (AI Mode: 5,428; Gemini: 1,876). The Jaccard similarity is **0.035** — they share barely 3.5% of their cited domains.
+AI Mode cites 29,795 unique domains. Gemini cites 5,143. The overlap between the two sets is **1,556 domains**. The Jaccard similarity is **0.0466**, which means they share 4.66% of their cited domains.
 
 To put it plainly:
-- **4.5% of AI Mode's domains** also show up in Gemini
-- **13.2% of Gemini's domains** also show up in AI Mode
 
-The domains that do overlap — AWS, Azure, Wikipedia, Mayo Clinic, Cleveland Clinic, Google Cloud, Harvard, Medium, PubMed/NIH — are the highest-authority, broadest-coverage publishers. The "must-cite" tier that both platforms independently surface.
+- 5.2% of AI Mode's domains also appear in Gemini.
+- 30.3% of Gemini's domains also appear in AI Mode.
 
-**At the URL level, the divergence is even sharper** — they might both cite healthline.com, but they're almost always citing different pages.
+The shared 1,556 are the heavy-hitters: PubMed, Wikipedia, Mayo Clinic, Cleveland Clinic, government sources, top universities. The "must-cite" tier that any retrieval system independently surfaces.
 
-**What this means for SEO:** Being visible in one Google AI product doesn't mean you're visible in the other. They're clearly running different retrieval pipelines on different corpus snapshots. You need to optimise for both separately.
+At the URL level, divergence is sharper. Both might cite healthline.com, but they pick different pages on the same domain.
 
----
+**What this means for SEO:** Visibility on AI Mode does not transfer to Gemini. Two Google products. Same parent. Different retrieval pipelines, different corpus snapshots, different ranker behavior. Optimize for both as if they were unrelated platforms.
 
-### Finding 7: AI Citations Go Way Beyond Organic Top-10
+### Finding 6: AI Citations Reach Far Beyond Organic Top-10
 
-We compared our citations against Google's own organic SERP rankings (collected via Bright Data SERP API for the same 520 queries) to see how much AI Mode diverges from traditional search:
+![SERP alignment](../reports/v2/06_serp_alignment.png)
 
-| Platform | URLs in organic top-10 | Domains in organic top-10 | Mean organic rank (when found) |
+We collected the organic SERP for all 5,000 queries via Bright Data SERP API and matched cited URLs against the organic top-10 for the same query.
+
+| Platform | Cited URL in Top-10 | Cited Domain in Top-10 | Mean Rank When Found |
 |---|---|---|---|
-| **AI Mode** | 25.1% | 35.3% | 3.96 |
-| **Copilot** | 32.5% | 37.7% | 2.99 |
-| **Perplexity** | 43.5% | 55.2% | 4.19 |
-| **Grok** | 22.2% | 44.6% | 4.04 |
-| **ChatGPT** | 6.5% | 13.4% | 4.08 |
-| **Gemini** | 15.3% | 10.5% | 3.57 |
-| **All platforms** | **25.3%** | **38.8%** | **3.95** |
+| **Gemini** | 41.14% | 21.39% | 4.06 |
+| **Perplexity** | 39.40% | 50.25% | 4.18 |
+| **Copilot** | 23.68% | 34.88% | **3.07** |
+| **AI Mode** | 22.49% | 39.54% | 4.43 |
+| **Grok** | 14.13% | 30.43% | 4.41 |
+| **ChatGPT** | 4.19% | 21.05% | 4.14 |
+| **Overall** | **23.05%** | **38.83%** | **4.27** |
 
-What stands out:
-- **Perplexity** has the highest SERP alignment (43.5% URL overlap, 55.2% domain) — it behaves most like a traditional search engine
-- **Copilot** also tracks organic rankings closely (32.5% URL, 37.7% domain), with the lowest mean rank (2.99) — it pulls from position 1-3 results
-- **ChatGPT** (6.5%) and **Gemini** (15.3%) go much further off the beaten path — they pull from well beyond the organic top 10
-- When a cited URL *does* rank organically, it tends to rank high: **mean position 3.95** — top slots get disproportionately cited
-- **74.7% of all cited URLs** don’t appear in organic top-10 at all
+A few things stand out.
 
-**What this means for SEO:** Organic ranking still matters (top positions get cited more), but it’s not nearly enough. AI platforms discover content far beyond what shows up in traditional search. **Brand visibility, topical authority, and domain trust matter more than chasing individual keyword rankings.**
+- **Gemini has the highest URL-level overlap** with the organic top-10 (41.14%). Gemini still pulls heavily from results that already rank.
+- **Perplexity has the highest domain-level overlap** (50.25%). Perplexity behaves most like a traditional search-based system at the domain level.
+- **Copilot has the lowest mean rank when found** (3.07). When Copilot cites a page that does rank organically, it is almost always in the top three. Copilot loves the top of the SERP.
+- **ChatGPT is the most independent of organic rankings**. Only 4.19% of ChatGPT URL citations rank in the organic top-10. 95.8% of its citations come from elsewhere.
+- **AI Mode dropped on URL overlap** since the March 2026 study (was 25.1%, now 22.5%) but its domain overlap held steady at ~40%. AI Mode is still pulling from authoritative domains, just from different pages on those domains.
 
----
+**What this means for SEO:**
 
-## Platform-by-Platform Optimisation Playbook
+- Organic ranking still matters, but it is not enough on its own.
+- For Perplexity and Copilot, classical SEO carries the most weight.
+- For ChatGPT, brand mentions and authority signals matter more than your own ranking.
+- 76.95% of all cited URLs do not appear in the organic top-10. The "rank for it" playbook covers less than a quarter of cases.
 
-The aggregate statistics mask dramatically different citation behaviours across platforms. The same content strategy will not work equally across all six. Here is what the data says to actually do, per platform.
+### Finding 7: Readability Is Bimodal
 
-### Google AI Mode (n = 13,622 citations)
-**URL top-10 overlap: 25.1% | Domain top-10 overlap: 35.3% | Mean rank when found: 3.96**
+![Readability bimodal](../reports/v2/07_readability_bimodal.png)
 
-AI Mode is the only platform where sentence structure directly affects whether you get cited — because it's the only platform that encodes the *exact sentence* in its citation URLs. The `#:~:text=` mechanism means Google is actively scoring and extracting individual sentences, not just surfacing pages.
+We scored 11,215 cited sentences with Flesch Reading Ease. The distribution is not a bell curve. It is two peaks with a dead middle.
 
-**What to optimise for:**
-- **Sentence-level writing** is the highest-leverage action here (and only here). Write key facts as 6–15 word declarative statements. Each sentence should stand alone (see Findings 2–3).
-- **Front-load your best content.** Cited sentences skew heavily toward the top of the page — your opening section is your citation zone (Finding 2).
-- **Structured content.** Lists and headings dramatically outperform unstructured prose for sentence matching (Finding 4).
-- Ranking in organic top-10 helps but is not required. 74.9% of AI Mode cited URLs are *not* in organic top-10. Write for grounding, not just for ranking.
-
-### Perplexity (n = 5,008 citations)
-**URL top-10 overlap: 43.5% | Domain top-10 overlap: 55.2% | Mean rank when found: 4.19**
-
-Perplexity shows the highest alignment with Google organic rankings of any platform we studied. It also shows the closest citation behavior to a traditional search-based retrieval system — most of what it cites actually ranks.
-
-**What to optimise for:**
-- **Ranking organically IS the primary lever** — more directly than any other platform. If you rank in the top 5 organically for a query, your probability of Perplexity citation is substantially above average.
-- Perplexity uses live web search with real-time indexing. Freshness matters: Ahrefs found it cites content that is ~250 days newer than organic Google results, and orders in-text references from newest to oldest.
-- **Content freshness signals** (updated date, recent statistics, current year in headings) are distinctly more valuable for Perplexity than for other platforms.
-- 55.2% domain overlap with organic top-10 means domain authority and backlink profile matter more here than for ChatGPT or Gemini.
-
-### Microsoft Copilot (n = 2,411 citations)
-**URL top-10 overlap: 32.5% | Domain top-10 overlap: 37.7% | Mean rank when found: 2.99**
-
-Copilot has the *lowest mean organic rank when a URL is found* — 2.99, compared to 3.95 overall. This means Copilot preferentially cites pages that rank at positions 1–3, not just somewhere in the top 10. The top three results are disproportionately valuable here compared to every other platform.
-
-**What to optimise for:**
-- **Position 1–3 is where Copilot's citations concentrate.** A page at rank #1 is not just a little better than rank #5 for Copilot — it is dramatically more likely to be cited.
-- Copilot runs on Bing's index. **Bing SEO fundamentals** (structured data, crawlability, fast page load) have an outsized return here vs Google-only optimisation.
-- Like Perplexity, Copilot is tightly integrated with real-time web search. Freshness and crawl recency matter.
-- Second only to Perplexity in SERP alignment, meaning the traditional "rank for it" advice is most applicable to Perplexity + Copilot as a pair.
-
-### Grok (n = 17,248 citations)
-**URL top-10 overlap: 22.2% | Domain top-10 overlap: 44.6% | Mean rank when found: 4.04**
-
-Grok provides the largest volume of citations in our dataset — by a wide margin. It returns ~33 URLs per query, compared to ~26 for AI Mode and ~1.5 for ChatGPT. This is a platform design choice (Grok just surfaces more source links per response), but it means Grok accounts for 40.1% of our total dataset. We report its per-platform stats separately to avoid letting its volume dominate aggregates.
-
-It shows an interesting asymmetry: 22.2% URL overlap but 44.6% domain overlap. This means Grok regularly cites a *domain* that ranks organically — but a different *URL* on that domain than the one that ranks. It values domain authority broadly, not specific page rankings.
-
-**What to optimise for:**
-- **Topical authority across a domain matters more than individual URL ranking.** If your domain is an authority in a space (e.g., healthline.com for health, investopedia.com for finance), Grok will cite pages across your site even if they don't individually rank in the top 10.
-- **Content breadth and depth** on a single domain. Grok's behaviour rewards sites that comprehensively cover a topic, not single-page one-offs.
-- Target the high-volume categories: Grok's citation skew toward broad queries suggests horizontal content (covering many angles of a topic) outperforms narrow vertical content.
-- Individual page-level SEO still matters for the URL-level overlap (22.2%) — but the real multiplier is domain-level trust.
-
-### ChatGPT (n = 797 citations)
-**URL top-10 overlap: 6.5% | Domain top-10 overlap: 13.4% | Mean rank when found: 4.08**
-
-> **Sample size note:** ChatGPT returned the fewest citations in our dataset (~1.5 per query). The directional patterns below are consistent with Ahrefs' independent findings on much larger ChatGPT samples, but treat ChatGPT-specific percentages as indicative rather than definitive.
-
-ChatGPT is the most independent of organic rankings of any platform studied — in our data, 93.5% of cited URLs are *not* in the organic top-10. Ahrefs confirmed this independently on a larger sample: only 6.82% of ChatGPT results overlap with Google's top 10, and 83% of its answers cite URLs not indexed in Google at all. Traditional SEO strategy has the weakest carry-over to ChatGPT visibility.
-
-**What to optimise for:**
-- **Brand presence across the broader web** — not just Google's index. ChatGPT trains on and references pages that Google may not heavily surface. Wikipedia, academic repositories, GitHub, documentation sites, and major publications all have outsized influence.
-- **Unlinked brand mentions.** Ahrefs found that branded web mentions (Spearman r = 0.664) correlate far more strongly with AI visibility than backlinks (r = 0.218). ChatGPT is the platform where this matters most, given its independence from organic ranking signals.
-- Being **cited in high-DR content** — Ahrefs found being mentioned on highly-linked pages correlates with ChatGPT visibility (weakly, but positively). Getting referenced in Wikipedia articles or high-authority press has a direct benefit here.
-- **Content freshness** is a notable ChatGPT characteristic: Ahrefs found it cites content ~458 days newer than organic Google results and orders citations newest-first. Keep important content updated.
-
-### Gemini (n = 3,885 citations)
-**URL top-10 overlap: 15.3% | Fragment coverage: 51.8% | Mean rank when found: 3.57**
-
-Gemini is the most analytically interesting platform in this dataset because it shares the `#:~:text=` fragment mechanism with AI Mode — but the two platforms cited only 3.5% of the same domains (Jaccard = 0.035). Despite running on the same underlying LLM family (Google's Gemini models), they operate on clearly distinct retrieval corpora and pipelines.
-
-**What to optimise for:**
-- **Dual strategy with AI Mode** — same sentence-level writing and structured content advice applies (since fragments reveal the same type of sentence-level extraction). But your AI Mode citations and Gemini citations will come from almost entirely different pages.
-- Gemini's lower fragment coverage (51.8% vs 70.9% for AI Mode) means some citations are pure LLM knowledge without live grounding. Both content quality (for LLM training) and current web presence (for RAG) matter.
-- Gemini shows a moderate preference for fresher content (cites content ~298 days newer than organic results per Ahrefs). Update pages regularly with current data.
-- **Smaller but sharper domain pool** — Gemini cited 1,876 unique domains vs AI Mode's 5,428. Breaking into Gemini's citation set is harder but more stable once achieved.
-
-### Reading the Rank Distribution
-
-Across all platforms, the steep drop-off in citation frequency across organic ranks highlights a compounding advantage at the top:
-
-| Organic rank | Times cited across all platforms |
-|---|---|
-| #1 | 2,099 |
-| #2 | 1,835 |
-| #3 | 1,538 |
-| #4 | 1,259 |
-| #5 | 1,098 |
-| #6 | 965 |
-| #7 | 895 |
-| #8 | 705 |
-| #9 | 379 |
-| #10 | 83 |
-
-Moving from rank #10 to rank #1 is not a 10× improvement in citation probability — it is roughly a **25× improvement**. The top three organic positions capture nearly as many AI citations as positions 4–10 combined (5,472 vs 5,384), for any platform that integrates SERP data.
-
----
-
-### Finding 8: Readability of Cited Sentences
-
-![Readability Distribution](../reports/readability_distribution.png)
-
-Using textstat, we scored Flesch Reading Ease, Flesch-Kincaid Grade Level, Gunning Fog Index, and syllable density across 11,411 scoreable sentences (261 ultra-short fragments were too brief to score reliably).
-
-**Core readability metrics:**
-
-| Metric | Mean | Median | Std | IQR |
-|---|---|---|---|---|
-| Flesch Reading Ease | 53.2 | 62.8 | 50.3 | 32.6 – 83.3 |
-| Flesch-Kincaid Grade | 7.0 | 5.7 | 7.0 | 2.9 – 10.0 |
-| Gunning Fog Index | 9.7 | 9.1 | 9.1 | 2.0 – 14.2 |
-| Coleman-Liau Index | 7.2 | 7.3 | 9.1 | 1.5 – 12.9 |
-| Syllables per word | 1.76 | 1.62 | 0.60 | 1.40 – 2.00 |
-
-The big surprise here is **bimodality**. Instead of a normal bell curve, readability splits into two peaks:
-
-**Flesch Reading Ease distribution:**
-
-| Category | Sentences | Share |
+| Flesch Reading Ease band | Sentences | Share |
 |---|---|---|
-| Very Easy (90–100) | 2,683 | 23.5% |
-| Easy (80–89) | 988 | 8.7% |
-| Fairly Easy (70–79) | 758 | 6.6% |
-| Standard (60–69) | 1,445 | 12.7% |
-| Fairly Difficult (50–59) | 576 | 5.0% |
-| Difficult (30–49) | 2,525 | 22.1% |
-| Very Confusing (<30) | 2,436 | 21.3% |
+| Very Confusing (under 30) | 2,302 | 20.5% |
+| Difficult (30-49) | 2,747 | 24.5% |
+| Fairly Difficult (50-59) | 293 | **2.6%** |
+| Standard (60-69) | 1,464 | 13.1% |
+| Fairly Easy (70-79) | 489 | 4.4% |
+| Easy (80-89) | 1,351 | 12.0% |
+| Very Easy (90-100) | 2,569 | 22.9% |
 
-![Grade Level Breakdown](../reports/readability_grade_breakdown.png)
+Median Flesch Reading Ease is 66.4 (Standard). Mean is 53.82. Standard deviation is 49.44.
 
-**Grade level distribution (Flesch-Kincaid):**
+The grade level distribution tells the same story. Elementary (4th grade or lower) is the largest bucket at 39.1% (4,386 sentences). College+ is the second at 20.4% (2,286 sentences). The middle bands (Senior High, Junior High) total only 12.9%.
 
-| Grade Level | Sentences | Share |
-|---|---|---|
-| Elementary (≤4th grade) | 4,339 | 38.0% |
-| Middle School (5–6) | 1,466 | 12.8% |
-| Junior High (7–8) | 1,408 | 12.3% |
-| High School (9–10) | 1,575 | 13.8% |
-| Senior High (11–12) | 213 | 1.9% |
-| College+ (13+) | 2,410 | 21.1% |
+**What this means for SEO:** Google does not have one readability target. It cites both the simple ("Vitamin D helps your body absorb calcium") and the technical ("Immunoglobulin G antibodies undergo Fc-mediated effector functions"). What it almost never cites is the muddled middle: corporate jargon, hedged language, fairly difficult prose that is neither plain nor properly technical.
 
-The grade levels tell the same story: the two biggest buckets are **Elementary (38.0%)** and **College+ (21.1%)** — the extremes, not the middle.
+Match your readability to the query intent. For a "what is X" query, write at a 6th-grade level. For "mechanism of action of X", write at a college level. Anything in between is a citation dead zone.
 
-![Readability vs Sentence Length](../reports/readability_vs_wordcount.png)
+### Finding 8: Freshness Has Tilted Toward 2025-2026
 
-**What this means for SEO:** Google doesn't have a single readability preference. It cites simple sentences ("Vitamin D helps your body absorb calcium") and dense technical ones ("Immunoglobulin G antibodies undergo Fc-mediated effector functions") at roughly equal rates. The IQR spans 51 Flesch points — a huge range.
+![Freshness year](../reports/v2/08_freshness_year.png)
 
-This makes sense when you think about query diversity: health symptom queries naturally pull from plain-language explainers, while technical queries pull from academic content. **Match your readability to the query's intent and audience** — don't artificially simplify everything. Writing at a 6th-grade level won't help for "mechanism of action of metformin" — but it will for "what does metformin do."
-
-The other interesting signal: the middle ground (Fairly Difficult, Flesch 50–59) at just **5.0%** is the *least* cited tier. Content that's neither simple nor truly technical — corporate jargon, hedged language, mushy middle-of-the-road prose — barely gets cited.
-
----
-
-### Finding 9: Content Freshness — How Old Is the Content Google Cites?
-
-![Freshness Year Distribution](../reports/freshness_year_distribution.png)
-
-We revisited the 1,604 unique source URLs and extracted publication dates by fetching live HTML and parsing JSON-LD `datePublished`, Open Graph `article:published_time`, standard `<meta>` date tags, `<time>` elements with `itemprop`, and HTTP `Last-Modified` headers. Of the 1,604 URLs, **1,021 (63.7%)** yielded at least one extractable date. After filtering to dates before the data-collection snapshot (February 2025), **548 pages** had valid content-age calculations.
+We pulled publication and modified dates for 6,970 unique source URLs. 4,718 had at least one extractable date (67.7%). 4,102 had a valid published-before-snapshot date that we could use for age calculations.
 
 | Metric | Value |
 |---|---|
-| Pages with extractable dates | 1,021 / 1,604 (63.7%) |
-| Valid ages (published before snapshot) | 548 |
-| Published dates found | 807 |
-| Modified dates found | 709 |
-| HTTP Last-Modified headers | 465 |
-| Date-extraction sources | JSON-LD, Open Graph, meta tags, `<time>`, HTTP headers |
+| URLs with extractable dates | 4,718 / 6,970 (67.7%) |
+| Valid age calculations | 4,102 |
+| Mean age | 838.8 days (2.30 years) |
+| **Median age** | **298 days (9.8 months)** |
+| 25th percentile | 91 days (3.0 months) |
+| 75th percentile | 942.8 days (2.58 years) |
+| Maximum age | 10,158 days (27.8 years) |
 
-**Content age at time of citation (n=548):**
+Year-of-publication distribution (top years):
 
-| Statistic | Value |
-|---|---|
-| Mean | 1,429 days (3.9 years) |
-| Median | 819 days (2.2 years) |
-| IQR | 296 – 1,921 days (0.8 – 5.3 years) |
-| Range | 1 – 9,693 days (0 – 26.5 years) |
-
-**Age distribution of cited pages:**
-
-| Age Bucket | Count | % |
+| Year | Cited pages | Share |
 |---|---|---|
-| < 1 month | 17 | 3.1% |
-| 1–3 months | 33 | 6.0% |
-| 3–6 months | 43 | 7.8% |
-| 6–12 months | 61 | 11.1% |
-| 1–2 years | 105 | 19.2% |
-| 2–5 years | 145 | 26.5% |
-| 5+ years | 144 | 26.3% |
+| 2026 | 1,398 | 34.1% |
+| 2025 | 1,140 | 27.8% |
+| 2024 | 466 | 11.4% |
+| 2023 | 274 | 6.7% |
+| 2022 | 182 | 4.4% |
+| 2021 | 149 | 3.6% |
+| 2020 | 100 | 2.4% |
+| 1998-2019 | 393 | 9.6% |
 
-![Freshness Distribution](../reports/freshness_distribution.png)
+**61.9% of dated cited pages were published in 2025 or 2026.** That is a meaningful tilt toward recent content compared to the March 2026 study, where median age was 2.2 years. The median dropped from 819 days to 298 days. Either AI Mode is favoring fresher content more aggressively now, or the web has shifted under it (publishers updating dates more often, more content created in 2025-2026).
 
-**Year distribution of cited content:** 2024 is the single largest year (145 pages, 26.5% of the dated sample), followed by 2023 (104, 19.0%) and 2022 (59, 10.8%). But the long tail is striking — content from 1998 to 2013 accounts for 39 cited pages (7.1%), including academic references and foundational guides that remain authoritative decades later.
+But the long tail is still alive: 393 cited pages were published between 1998 and 2019. Authoritative older content still gets cited, especially for medical, scientific, and historical queries.
 
-![Freshness vs Position](../reports/freshness_by_position.png)
+**What this means for SEO:** Recent matters more than it did a year ago. Pages published or meaningfully updated in 2025-2026 have an edge. But "recent" is not a hard requirement. A solid 2021 page on a fundamental topic still gets cited if the structure and authority are right.
 
-**What this means for SEO:** Google AI Mode doesn't strongly favour fresh content. The median cited page is **2.2 years old**, and over half (52.7%) is more than 2 years old. Compare that to Ahrefs' finding that ChatGPT cites content ~458 days newer than organic Google results and Perplexity ~250 days fresher.
+### Finding 9: Each Platform Has Its Own Personality
 
-For AI Mode specifically, **evergreen authority matters more than recency**. A well-structured, factually accurate page from 2021 is just as likely to be cited as one from last month — maybe more so, because it's had time to accumulate trust signals. That said, 2024 content still tops the single-year leaderboard, so recency is *a* factor — just not the dominant one.
+![Platform personality](../reports/v2/09_platform_personality.png)
 
-This doesn't mean stop updating content. Pages that get updated regularly may keep their original pub date while accumulating authority. The point is that AI Mode doesn't penalise older content the way ChatGPT and Perplexity appear to.
+Pulling all the per-platform metrics together gives you a quick map of who behaves how. The bubble chart above plots URL top-10 overlap (x-axis) against domain top-10 overlap (y-axis). Bubble size scales with total citation count.
+
+Quick reads:
+
+- **Perplexity**: lower-right (39.4% URL, 50.3% domain). Most like classical search. Reward: rank well organically.
+- **AI Mode**: middle-upper (22.5% URL, 39.5% domain). Big bubble (88K citations). Pulls from authoritative domains but specific pages diverge from rankings.
+- **Copilot**: middle (23.7% URL, 34.9% domain). Strongest preference for top-3 organic results when it pulls from rankings at all.
+- **Gemini**: upper-right corner on URL axis (41.1% URL, 21.4% domain). Pulls from URLs that rank but a narrower domain set.
+- **Grok**: lower-middle (14.1% URL, 30.4% domain). Largest single-call output (35.79 citations per query) but loose alignment with rankings.
+- **ChatGPT**: bottom-left (4.2% URL, 21.0% domain). The most independent. Almost no overlap with organic search.
+
+---
+
+## Platform-by-Platform Optimization Playbook
+
+The averages hide huge per-platform differences. The same content strategy will not work equally on all six. Here is what to do per platform.
+
+### Google AI Mode (n = 88,392 citations)
+
+**URL top-10 overlap: 22.5% | Domain top-10 overlap: 39.5% | Mean rank when found: 4.43 | Fragment coverage: 0.0%**
+
+AI Mode is now the largest source of AI citations in our dataset (57.6% of total) but no longer the source of sentence-level data. The fragment trick is dead. What you can still do:
+
+- **Front-load important claims.** Mean cited position is 0.3704 across the matched Gemini sample. AI Mode's underlying retrieval likely behaves similarly. Top three paragraphs are your citation zone.
+- **Build domain authority across many pages.** AI Mode cites 29,795 unique domains. Domain-level trust is the bigger lever than any single ranking.
+- **Do not rely on organic rank alone.** 77.5% of AI Mode citations are not in the organic top-10. Brand presence and topical authority matter at least as much.
+- **Stop scraping AI Mode for the cited sentence.** It is gone. Use Gemini for that.
+
+### Gemini (n = 13,487 citations)
+
+**URL top-10 overlap: 41.1% | Domain top-10 overlap: 21.4% | Mean rank when found: 4.06 | Fragment coverage: 84.1%**
+
+Gemini is now the only platform that exposes which sentence got pulled. That makes it the new target for sentence-level optimization. Plus its URL-level SERP overlap (41.1%) is the highest of the six platforms.
+
+- **Sentence structure matters more here than anywhere else.** 6-15 word declarative sentences at the top of the page. Same advice as 2025 AI Mode, now applies to Gemini.
+- **Rank well organically.** 41.1% of Gemini citations match URLs in the organic top-10. That is high enough that classical SEO directly drives Gemini visibility.
+- **Smaller domain pool to break into.** Gemini cited 5,143 unique domains, vs AI Mode's 29,795. Harder to crack but more stable once in.
+- **Update content regularly.** Gemini's freshness preference is moderate but consistent.
+- **Monitor your `#:~:text=` fragments here.** This is the only window left into Google's chunking pipeline.
+
+### Perplexity (n = 8,562 citations)
+
+**URL top-10 overlap: 39.4% | Domain top-10 overlap: 50.3% | Mean rank when found: 4.18 | Fragment coverage: 0%**
+
+Perplexity has the highest domain-level overlap of any platform. It behaves most like a traditional search engine.
+
+- **Rank organically.** This is the primary lever for Perplexity. Top 5 organic positions translate directly into citation probability.
+- **Freshness matters.** Ahrefs has previously found Perplexity cites content ~250 days fresher than organic results.
+- **Domain authority and backlink profile** carry more weight here than for ChatGPT or Gemini.
+
+### Microsoft Copilot (n = 8,779 citations)
+
+**URL top-10 overlap: 23.7% | Domain top-10 overlap: 34.9% | Mean rank when found: 3.07 | Fragment coverage: 0%**
+
+Copilot has the lowest mean rank when found of any platform: 3.07. When Copilot does cite a page that ranks organically, it is almost always in positions 1-3.
+
+- **Position 1-3 is gold for Copilot.** Rank #1 is dramatically more valuable than rank #5 here.
+- **Bing SEO matters.** Copilot runs on Bing's index. Structured data, fast page load, and Bing-specific crawlability pay off.
+- **Freshness matters.** Like Perplexity, Copilot is tightly integrated with real-time web search.
+
+### Grok (n = 30,676 citations)
+
+**URL top-10 overlap: 14.1% | Domain top-10 overlap: 30.4% | Mean rank when found: 4.41 | Fragment coverage: 0%**
+
+Grok returns the most citations per query (35.79). 20% of the entire dataset is Grok. It cares about domain authority broadly, not specific page rankings.
+
+- **Topical authority across a domain matters more than any single URL.** If your domain is the authority in a space, Grok will cite multiple pages from your site even if none individually rank in the top 10.
+- **Breadth of coverage.** Grok rewards sites that cover many angles of a topic.
+- **High volume of citations means more chances to surface.** Get cited once per query area and you compound across the dataset.
+
+### ChatGPT (n = 3,529 citations)
+
+**URL top-10 overlap: 4.2% | Domain top-10 overlap: 21.1% | Mean rank when found: 4.14 | Fragment coverage: 0%**
+
+ChatGPT is the most independent of organic rankings of any platform we studied. 95.8% of its cited URLs are not in the organic top-10. Traditional SEO has the weakest carry-over here.
+
+- **Brand presence beyond Google.** ChatGPT pulls from pages Google may not heavily surface: Wikipedia, GitHub, academic repositories, big publications, documentation.
+- **Unlinked brand mentions.** Per Ahrefs, branded web mentions correlate far more with AI visibility than backlinks. ChatGPT is where this matters most.
+- **High-DR mentions.** Get referenced in Wikipedia or high-authority press for direct ChatGPT lift.
+- **Freshness.** ChatGPT cites content ~458 days newer than organic Google results per Ahrefs. Keep important pages updated.
+- **Sample caveat:** ChatGPT only returned cited responses for 183 of 5,000 queries. Use ChatGPT-specific stats as directional, not definitive.
+
+### Reading the Rank Distribution
+
+Across all platforms, the steep drop in citation frequency by organic rank shows the compounding advantage of top positions:
+
+| Organic rank | Times cited across all platforms |
+|---|---|
+| #1 | 6,096 |
+| #2 | 5,335 |
+| #3 | 4,592 |
+| #4 | 4,092 |
+| #5 | 3,691 |
+| #6 | 3,452 |
+| #7 | 3,078 |
+| #8 | 2,638 |
+| #9 | 1,732 |
+| #10 | 654 |
+
+Moving from rank #10 to rank #1 is roughly a **9.3x improvement** in citation probability across the platforms that integrate SERP data. Top three positions (16,023 citations) capture more than positions 4-10 combined (19,337). The first page of Google still pulls a disproportionate share of AI citations, even on platforms that are mostly independent of rankings.
 
 ---
 
 ## Want to Run This Yourself?
-
-### Quick Start
 
 ```bash
 # 1. Clone and install
@@ -612,120 +556,155 @@ cp .env.example .env
 # Edit .env: BRIGHTDATA_API_KEY=your_key
 
 # 3. Collect data (AI Mode)
-python scripts/01_collect_ai_mode.py --limit 20
+python scripts/01_collect_ai_mode.py --limit 50
 
-# 4. Parse text fragments
+# 4. Parse text fragments (Gemini-only as of May 2026)
 python scripts/03_parse_text_fragments.py
 
 # 5. Analyse
 python scripts/05_analyze_patterns.py
 
 # 6. Generate charts
-python scripts/06_generate_charts.py
+python scripts/09_generate_v2_charts.py
 ```
 
-**Estimated cost:** ~$50–120 for 520 queries across all platforms + source page scraping.
+**Estimated cost:** ~$200-400 for 5,000 queries across all platforms plus source page scraping.
 
 ---
 
 ## Discussion
 
-### The SERP vs API Problem
+### What Changed Between March 2026 and May 2026
 
-Every prior study that used the Gemini developer API has a validity problem: Surfer SEO explicitly documented that API responses differ from what real users see. This study uses **Bright Data's AI Mode Scraper**, which hits `google.com/search?udm=50` via residential proxies — the actual AI Mode SERP. Not a proxy, not an approximation — the real thing.
+Three big shifts.
 
-### What Could Be Better
+1. **AI Mode dropped text fragments**. From 70.9% coverage to 0%. Either an intentional UX change or a backend renderer change. We do not know the internal reason. We know the external effect: the sentence-level breadcrumb is gone.
+2. **Gemini doubled down on fragments**. From 51.8% to 84.1%. Google clearly sees value in the fragment mechanism for Gemini's surface, just not for AI Mode anymore.
+3. **Freshness preference tightened**. Median cited age dropped from 2.2 years to 298 days. Some of this is the web aging into newer content. Some is likely a real shift in retrieval behavior toward fresher pages.
 
-1. **520 queries is moderate** — positional bias should be replicated at Ahrefs/Surfer scale
-2. **US-only** — citations likely vary by country and language
-3. **Point-in-time snapshot** — Google updates grounding behaviour continuously
-4. **Scraper blocks** — some source pages block scrapers; those rows are excluded
-5. **Fragment coverage isn't 100%** — 29.1% of AI Mode and 48.2% of Gemini citations lack fragments
-6. **Positional sample** — 1,719 validated samples = 14.7% of decoded fragments. More scraping would help.
-7. **Partial freshness data** — pub dates extractable for 63.7% of cited URLs. Finding 9 is based on 548 dated pages.
-8. **No DR/backlink analysis** — we didn't correlate citations with domain rating or branded mentions. That's the obvious next join.
-9. **No semantic similarity** — we didn't compute query-to-sentence cosine similarity. That could separate the position signal from the relevance signal.
+### The SERP vs API Problem (Still True)
 
-### What We Didn't Cover (Yet)
+Every prior study that used the Gemini developer API has a validity problem. Surfer SEO documented it explicitly: API responses differ from what real users see. This study uses Bright Data's scrapers, which hit the actual user-facing surfaces of all six platforms via residential proxies. Not API approximations. The real thing.
 
-Three obvious next steps based on the parallel research:
+### On Google Saying "GEO and AEO Are Still SEO"
 
-**1. Freshness vs citation probability.** Finding 9 shows the age distribution of cited content (median 2.2 years), but we can't yet say whether fresher content gets cited *more often* — only that the cited set spans a wide range. Correlating content age with per-query citation frequency (controlling for DA) would show whether AI Mode actively prefers fresh content or is genuinely age-agnostic.
+On May 15, 2026, Google published an official AI Optimization Guide directly in Search Central documentation. The headline: "Optimizing for generative AI search is optimizing for the search experience, and thus still SEO." The guide explicitly lists what you do NOT need for AI visibility: llms.txt files, content chunking, AI-specific rewrites, and inauthentic brand mentions.
 
-**2. Domain authority and brand presence.** The domain frequency chart (YouTube, Reddit, Wikipedia at the top) screams authority signals. But we can't separate "cited because well-written" from "cited because the domain has high DR and tons of web mentions." Joining citations.csv with Ahrefs DR data is the obvious way to untangle that.
+The SEO community picked this up as vindication that GEO and AEO were never real disciplines. Google also confirmed that its AI systems (AI Overviews and AI Mode) draw from the same regular search index, so whoever ranks well in classic search already meets the technical prerequisites for AI visibility.
 
-**3. Query-to-sentence semantic similarity.** Our findings describe *where* sentences sit on a page, but not *how closely they match the query*. A cited sentence at position 34.9% might be there because it's near the top, or because it's the best semantic match. Computing query-sentence cosine similarity with an embedding model is the natural next step.
+I agree with Google. For Google products.
+
+The problem is that this dataset covers six platforms, not one. Look at what the data says about the other five:
+
+- **ChatGPT** overlaps the organic top-10 at 4.2% URL level. Classical SEO has almost no carry-over to ChatGPT citations.
+- **Grok** overlaps at 14.1%. Its citation logic is opaque and only weakly correlated with Google rankings.
+- **Perplexity** overlaps at 39.4%. Classical SEO works reasonably well here.
+- **Copilot** uses Bing's index, not Google's. Bing SEO and Google SEO diverge on technical and domain-level signals.
+- **Gemini** overlaps at 41.1% at the URL level. Classical SEO works for Gemini too.
+
+So Google's statement is accurate for Google AI Mode and Gemini. It does not extend to the other four platforms that collectively returned 51,546 citations in this dataset. If you only care about showing up in Google's own AI surfaces, standard SEO is your playbook. If you care about ChatGPT, Grok, and cross-platform AI visibility, the picture is different.
+
+**On chunking specifically**: Google says you do not need to chunk content for its systems. That may be true for its own products. But Dan Petrovic at DEJAN AI published research in December 2025 analyzing 7,060 queries and 2,275 tokenized pages to measure exactly how Google's AI selects content for grounding. His key finding: each AI answer operates on a fixed budget of approximately 2,000 words per query, distributed across sources by rank. The #1 source gets a median of 531 words (28% of the total budget). By rank #5 that drops to 266 words. And coverage falls off sharply as page size increases: pages under 1,000 words get 61% of their content selected; pages over 3,000 words get only 13%.
+
+That is not chunking in the sense of "add headers and bullet points for AI systems." But it is a strong signal that density and brevity matter more than length, and that Google's retrieval pipeline is extracting passages, not full pages. The practical advice from Petrovic's work overlaps heavily with what this dataset shows: short declarative sentences, front-loaded claims, high propositional density. Google's own systems reward the same content patterns whether you frame it as "chunking" or not.
+
+The distinction that matters: you should not restructure your content specifically for AI systems as a separate task from writing clear, structured content. If you write with clarity and density, both Google's AI Mode and the non-Google platforms benefit. The difference is that for non-Google platforms, content structure and brand presence outside of Google rankings carry more independent weight.
+
+### Limitations
+
+1. **5,000 queries is large but not exhaustive.** Per-platform behavior should still hold at higher samples but specific percentages will drift.
+2. **US-only.** Citation behavior likely varies by country and language.
+3. **Point-in-time snapshot.** AI grounding behavior changes constantly. The March 2026 to May 2026 comparison is the clearest evidence of that. Two months apart and the AI Mode fragment behavior fully flipped.
+4. **Scraper blocks.** Some source pages block scrapers. Those rows are excluded.
+5. **Fragment coverage on AI Mode is now zero.** No sentence-level data possible from AI Mode in this dataset.
+6. **Positional sample is from Gemini only.** 9,968 matched citations. AI Mode positional behavior is inferred to be similar but not directly measured here.
+7. **Partial freshness data.** Pub dates extractable for 67.7% of cited URLs. Finding 8 is based on 4,102 dated pages.
+8. **No DR or backlink correlation.** That is the obvious next study.
+9. **No semantic similarity scoring.** Same.
+
+### What We Did Not Cover (Yet)
+
+1. **AI Mode positional behavior post-fragment-removal.** Without fragments, we cannot directly measure where the cited sentence sits on the page. Workaround: scrape the page, run a similarity search between the answer text and the page text, infer the position. That is the next study.
+2. **Domain authority and brand presence.** YouTube, Reddit, Wikipedia at the top of the citation list scream authority signals. Joining citations.csv with Ahrefs DR data would untangle "cited because well-written" from "cited because high DR."
+3. **Query-to-sentence semantic similarity.** Position in the document is one signal. Semantic match to the query is another. Computing query-sentence cosine similarity with embeddings is the natural next step.
 
 ### Implications for Content Strategy
 
-1. **Put your most important claims in paragraphs 1–3** — top-of-page positioning is a significant advantage
-2. **Write short, declarative sentences for key facts** — 6–15 words, one claim per sentence
-3. **Use structured formats** — lists, tables, and headings dramatically increase citation probability
-4. **Monitor both Google platforms separately** — AI Mode and Gemini cite almost entirely different sources
-5. **Platform-appropriate strategies** — Perplexity and Copilot reward organic ranking; ChatGPT rewards broad web brand presence; AI Mode rewards sentence structure; Grok rewards domain authority breadth
-6. **Brand presence beyond your own website** — branded web mentions correlate more strongly with AI visibility than backlinks (per Ahrefs)
-7. **Content freshness differs by platform** — AI Mode tolerates older content; ChatGPT and Perplexity strongly prefer fresh
-8. **Target high-Q&A query categories** — health, finance, and tech queries generate the most citations per query across all platforms
+1. **Stop relying on the AI Mode fragment trick.** It is dead.
+2. **Use Gemini fragments for sentence-level monitoring.** Run a regular crawl on Gemini citations for your priority queries. Decode the `#:~:text=` fragments to see exactly which sentences Google is pulling from your competitors.
+3. **Front-load your most important claims.** Top three to four paragraphs is your citation zone.
+4. **Write atomic facts.** 6-15 words per claim. One claim per sentence. Cap at 18 words.
+5. **Match readability to query type.** Plain language for plain queries. Technical for technical. Avoid the muddled middle.
+6. **Build domain-level authority.** YouTube and Reddit citations show that platform authority transfers across queries.
+7. **Treat AI Mode and Gemini as separate platforms.** They are.
+8. **For ChatGPT, invest in brand presence beyond your website.** Wikipedia, GitHub, big publications.
+9. **For Perplexity and Copilot, classical SEO is still the play.** Rank in the organic top-10.
+10. **For Grok, build topical breadth across your domain.** Cover many angles of every topic.
 
 ---
 
 ## Conclusion
 
-The `#:~:text=` fragment in Google AI Mode citation URLs isn't just a browser convenience — it's a window into Google's grounding pipeline. Decoding these fragments at scale lets us study citation behaviour at a sentence level that no prior research has done systematically.
+The biggest signal in this dataset is what changed, not what stayed the same. Google killed text fragments in AI Mode at some point between March 2026 and May 2026. The breadcrumb that let SEOs reverse-engineer Google's chunking logic is gone from AI Mode. Gemini still ships them, and at higher coverage than before, so the technique survives on a different surface.
 
-The full codebase is published. Run it yourself, extend the query set, add categories, test in other countries. Everything is reproducible and auditable.
+Everything else in the playbook stayed roughly the same. Top-of-page wins. Short sentences win. Structure wins. Authority wins. Different platforms behave differently and you cannot win all six with one strategy.
+
+The full pipeline is published. Run it yourself. Add categories. Test in other countries. Extend the query set. Everything is reproducible and auditable.
 
 ---
 
-## Cheatsheet: Getting Cited in Google AI Mode
+## Cheatsheet: Getting Cited in AI Search (May 2026 Edition)
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│           GOOGLE AI MODE CITATION CHEATSHEET                        │
-│                (Based on Sentence-Level Analysis)                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  SENTENCE STRUCTURE                                                 │
-│  ✅ 6–15 words per key claim (sweet spot: 91.4% of all citations)  │
-│  ✅ One fact per sentence (no compound clauses)                     │
-│  ✅ Declarative tone (not questions, not passive hedge language)     │
-│  ✅ Match readability to query intent (simple for consumer, technical│
-│     for specialist — the muddled middle is least cited at 5.0%)    │
-│  ❌ Avoid: "It can be argued that...", "Some believe..."            │
-│  ❌ Nothing over 17 words was cited in this dataset                 │
-│                                                                     │
-│  PAGE STRUCTURE                                                     │
-│  ✅ Most important claims in first 3 paragraphs (mean cite pos 35%) │
-│  ✅ Use <h2>/<h3> to signal topic sections                         │
-│  ✅ Add structured lists or tables for enumerations (91% vs 39%)   │
-│  ✅ Lead with the answer, then provide context                      │
-│                                                                     │
-│  TOPICAL SIGNALS                                                    │
-│  ✅ Match the query's information type (list → list, explain → prose│
-│  ✅ Use the query term verbatim in the first paragraph              │
-│  ✅ Maintain factual accuracy (cited sentences get verified)        │
-│                                                                     │
-│  FRESHNESS                                                         │
-│  ✅ Median cited page is 2.2 years old — evergreen content works   │
-│  ✅ 52.7% of cited pages are 2+ years old (Google AI Mode)         │
-│  ✅ 2024 content dominates (26.5%) — some recency signal exists    │
-│  ⚠️  ChatGPT/Perplexity prefer much fresher content than AI Mode   │
-│                                                                     │
-│  AUTHORITY SIGNALS (inferred from domain frequency)                │
-│  ✅ High-trust domains cited regardless of individual page quality  │
-│  ✅ Topical authority > single-page optimisation                   │
-│  ✅ Wikipedia-style completeness rewarded at scale                  │
-│                                                                     │
-│  MONITORING                                                         │
-│  ✅ Check citation URLs for #:~:text= to see what was cited         │
-│  ✅ Test both AI Mode (google.com/search?udm=50) AND Gemini        │
-│  ✅ Results differ — optimise for both                              │
-│                                                                     │
-│  DECODE YOUR CITATIONS:                                             │
-│  URL#:~:text=Sentence%20goes%20here → "Sentence goes here"         │
-│  Use: python -c "from urllib.parse import unquote; print(unquote('Sentence%20goes%20here'))"
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------+
+|  AI SEARCH CITATION CHEATSHEET                                        |
+|  153,425 citations, 5,000 queries, 6 platforms, May 2026              |
++-----------------------------------------------------------------------+
+|                                                                       |
+|  WHAT CHANGED                                                         |
+|  - AI Mode fragment coverage: 70.9% (Mar 2026) -> 0.0% (May 2026)     |
+|  - Gemini fragment coverage: 51.8% -> 84.1%                           |
+|  - Use Gemini for sentence-level monitoring, not AI Mode              |
+|                                                                       |
+|  SENTENCE STRUCTURE (Gemini fragment data)                            |
+|  - 6-15 words per key claim (94% of all citations)                    |
+|  - One fact per sentence, no compound clauses                         |
+|  - Declarative tone, no questions, no hedging                         |
+|  - Match readability to query intent (Flesch under 30 or above 80,    |
+|    skip the muddled middle at Flesch 50-59 which got only 2.6%)       |
+|  - Hard ceiling: nothing over 18 words was cited                      |
+|                                                                       |
+|  PAGE STRUCTURE                                                       |
+|  - Most important claims in first 3 paragraphs (mean cite pos 37%)    |
+|  - Use h2 / h3 headings to signal topic sections                      |
+|  - Add structured lists or tables for enumerations                    |
+|  - Lead with the answer, then provide context                         |
+|                                                                       |
+|  PER-PLATFORM PRIORITIES                                              |
+|  - AI Mode: domain authority, top-of-page placement                   |
+|  - Gemini: classical SEO + sentence structure (rank well + write well)|
+|  - Perplexity: rank in organic top-10 (50.3% domain overlap)          |
+|  - Copilot: rank #1-3 specifically (mean rank when found = 3.07)      |
+|  - Grok: topical breadth across many pages on one domain              |
+|  - ChatGPT: brand mentions on Wikipedia and high-authority publishers |
+|                                                                       |
+|  FRESHNESS                                                            |
+|  - Median cited page is 298 days old                                  |
+|  - 61.9% of dated cited pages are from 2025-2026                      |
+|  - But evergreen content from 2018-2022 still gets cited              |
+|  - ChatGPT and Perplexity prefer fresher than AI Mode                 |
+|                                                                       |
+|  MONITORING                                                           |
+|  - Pull Gemini citations for your priority queries                    |
+|  - Decode the #:~:text= fragments with urllib.parse.unquote           |
+|  - Track per-platform citation counts, not aggregate                  |
+|  - Update any AI Mode fragment scraper: it returns empty now          |
+|                                                                       |
+|  DECODE A GEMINI CITATION SENTENCE:                                   |
+|  python -c "from urllib.parse import unquote;                         |
+|             print(unquote('Sentence%20goes%20here'))"                 |
+|                                                                       |
++-----------------------------------------------------------------------+
 ```
 
 ---
@@ -734,19 +713,22 @@ The full codebase is published. Run it yourself, extend the query set, add categ
 
 **Prior citation studies (for comparison)**
 
-1. Ahrefs (2025). *76% of AI Overview Citations Pull From Top 10 Pages* — 1.9M citations from 1M AI Overviews. https://ahrefs.com/blog/search-rankings-ai-citations/
-2. Ahrefs (2025). *Only 12% of AI Cited URLs Rank in Google's Top 10* — 15,000 prompts across ChatGPT, Gemini, Copilot. https://ahrefs.com/blog/ai-search-overlap/
-3. Ahrefs (2025). *90+ AI SEO Statistics — 17 Million Citations Across 7 Platforms*. https://ahrefs.com/blog/ai-seo-statistics/
-4. Ahrefs (2025). *67% of ChatGPT's Top 1,000 Citations Are Off-Limits to Marketers*. https://ahrefs.com/blog/chatgpts-most-cited-pages/
-5. Ahrefs (2025). *New Study: AI Assistants Prefer to Cite "Fresher" Content (17 Million Citations Analyzed)* — AI assistants prefer content 25.7% fresher than organic SERPs; ChatGPT cites content ~458 days newer than organic Google results. https://ahrefs.com/blog/do-ai-assistants-prefer-to-cite-fresh-content/
-6. Ahrefs (2025). *An Analysis of AI Overview Brand Visibility Factors (75K Brands Studied)* — Branded web mentions (Spearman r = 0.664) are the strongest correlator with AI Overview brand visibility; outperforms backlinks (r = 0.218). https://ahrefs.com/blog/ai-overview-brand-correlation/
-7. Surfer SEO (2025). *AI Citation Report 2025: 36M AI Overviews, 46M Citations*. https://surferseo.com/blog/ai-citation-report/
-8. Seer Interactive (2025). *Initial Research: Gemini 3 Query Fan-Outs*. https://www.seerinteractive.com/insights/gemini-3-query-fan-outs-research
+1. Ahrefs (2025). *76% of AI Overview Citations Pull From Top 10 Pages.* https://ahrefs.com/blog/search-rankings-ai-citations/
+2. Ahrefs (2025). *Only 12% of AI Cited URLs Rank in Google's Top 10.* https://ahrefs.com/blog/ai-search-overlap/
+3. Ahrefs (2025). *90+ AI SEO Statistics, 17 Million Citations Across 7 Platforms.* https://ahrefs.com/blog/ai-seo-statistics/
+4. Ahrefs (2025). *AI Assistants Prefer to Cite "Fresher" Content (17M Citations Analyzed).* https://ahrefs.com/blog/do-ai-assistants-prefer-to-cite-fresh-content/
+5. Ahrefs (2025). *AI Overview Brand Visibility Factors (75K Brands).* https://ahrefs.com/blog/ai-overview-brand-correlation/
+6. Surfer SEO (2025). *AI Citation Report 2025: 36M AI Overviews, 46M Citations.* https://surferseo.com/blog/ai-citation-report/
+7. Seer Interactive (2025). *Initial Research: Gemini 3 Query Fan-Outs.* https://www.seerinteractive.com/insights/gemini-3-query-fan-outs-research
+
 **Specifications and infrastructure**
 
-9. Chromium / web.dev (2020). *Boldly link where no one has linked before: Text Fragments*. https://web.dev/articles/text-fragments
-10. Bright Data. *Google AI Mode Scraper Documentation*. https://brightdata.com
+8. Chromium / web.dev (2020). *Boldly link where no one has linked before: Text Fragments.* https://web.dev/articles/text-fragments
+9. Bright Data. *Google AI Mode Scraper Documentation.* https://brightdata.com
+10. Daniel Shashko (2026). *ai-citation-patterns (May 2026 dataset).* https://github.com/danishashko/ai-citation-patterns
+11. Daniel Shashko (March 2026). *Prior study: How Google Picks Which Sentences to Cite in AI Mode (Reverse-Engineering 42,971 Citations).* https://hackmd.io/@A09fyOMpSD2VYIJodmXHqQ/r1eJyqthdbe
 
----
+**GEO/AEO and chunking**
 
-*Article generated from research conducted with the [grounding-citation-analysis](https://github.com/danishashko/grounding-citation-analysis) pipeline. All findings are reproducible. Code and queries published under MIT licence.*
+12. Google Search Central (May 15, 2026). *AI Optimization Guide.* https://developers.google.com/search/docs/fundamentals/ai-optimization-guide
+13. Dan Petrovic / DEJAN AI (December 2025). *How Big Are Google's Grounding Chunks?* https://dejan.ai/blog/how-big-are-googles-grounding-chunks/

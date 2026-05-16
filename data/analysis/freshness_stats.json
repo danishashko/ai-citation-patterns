@@ -1,0 +1,71 @@
+{
+  "total_urls": 6970,
+  "urls_with_published": 3883,
+  "urls_with_modified": 3332,
+  "urls_with_last_modified_header": 2229,
+  "urls_with_any_date": 4718,
+  "urls_with_errors": 61,
+  "age_stats": {
+    "n": 4102,
+    "mean_days": 838.8,
+    "median_days": 298.0,
+    "std_days": 1423.4,
+    "min_days": 0,
+    "max_days": 10158,
+    "p25_days": 91.0,
+    "p75_days": 942.8
+  },
+  "age_distribution": {
+    "2\u20135 years": 694,
+    "3\u20136 months": 661,
+    "1\u20132 years": 633,
+    "1\u20133 months": 579,
+    "6\u201312 months": 554,
+    "5+ years": 545,
+    "< 1 month": 436
+  },
+  "year_distribution": {
+    "1998": 10,
+    "1999": 5,
+    "2001": 8,
+    "2002": 10,
+    "2003": 11,
+    "2004": 7,
+    "2005": 6,
+    "2006": 4,
+    "2007": 4,
+    "2008": 5,
+    "2009": 5,
+    "2010": 12,
+    "2011": 10,
+    "2012": 9,
+    "2013": 18,
+    "2014": 22,
+    "2015": 18,
+    "2016": 39,
+    "2017": 44,
+    "2018": 51,
+    "2019": 95,
+    "2020": 100,
+    "2021": 149,
+    "2022": 182,
+    "2023": 274,
+    "2024": 466,
+    "2025": 1140,
+    "2026": 1398
+  },
+  "published_source_breakdown": {
+    "jsonld": 3392,
+    "og": 266,
+    "time_tag": 190,
+    "meta": 18,
+    "dc": 17
+  },
+  "modified_source_breakdown": {
+    "jsonld": 3063,
+    "og": 238,
+    "meta": 14,
+    "dc": 9,
+    "time_tag": 8
+  }
+}

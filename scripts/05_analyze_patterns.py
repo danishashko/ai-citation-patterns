@@ -28,6 +28,12 @@ Usage:
 
 import json
 import os
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    _sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 from pathlib import Path
 
 import numpy as np
@@ -58,10 +64,14 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None, pd.Dat
     pages_df = pd.read_csv(pages_path) if pages_path.exists() else None
     serp_df  = pd.read_csv(serp_path)  if serp_path.exists()  else None
 
-    # Join query category from queries.csv if available
-    query_meta = Path("queries/queries.csv")
-    if query_meta.exists():
-        qdf = pd.read_csv(query_meta)[["query", "category", "intent"]]
+    # Join query category from queries.csv if available (prefer 5k version if present)
+    query_meta = None
+    for cand in [Path("queries/queries_5k.csv"), Path("queries/queries.csv")]:
+        if cand.exists():
+            query_meta = cand
+            break
+    if query_meta is not None:
+        qdf = pd.read_csv(query_meta)[["query", "category", "intent"]].drop_duplicates("query")
         cite_df = cite_df.merge(qdf, on="query", how="left")
         if not ans_df.empty:
             ans_df = ans_df.merge(qdf, on="query", how="left")

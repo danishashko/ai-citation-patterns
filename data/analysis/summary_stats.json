@@ -1,0 +1,142 @@
+{
+  "summary": {
+    "total_queries": 5000,
+    "total_citations": 153425,
+    "total_unique_domains": 41370,
+    "total_unique_urls": 113927,
+    "fragment_coverage_pct": 7.4,
+    "avg_citations_per_query": 31.02,
+    "median_citations_per_query": 22.0,
+    "avg_cited_sentence_words": 9.27,
+    "platforms": [
+      "ai_mode",
+      "chatgpt",
+      "copilot",
+      "gemini",
+      "grok",
+      "perplexity"
+    ],
+    "avg_answer_word_count": 480.18
+  },
+  "h1_positional_bias": {
+    "test": "H1_positional_bias",
+    "n": 9968,
+    "mean_position": 0.3704,
+    "t_statistic": -63.4472,
+    "p_value": 0.0,
+    "significant": "True",
+    "interpretation": "Cited sentences appear on average at 37% through the document. Significant top bias detected."
+  },
+  "sentence_length": {
+    "n": 11346,
+    "mean": 9.27,
+    "median": 10.0,
+    "std": 2.36,
+    "min": 1,
+    "max": 18,
+    "p25": 7.0,
+    "p75": 11.0,
+    "distribution_by_bucket": {
+      "1-5 words": 682,
+      "6-10 words": 5133,
+      "11-20 words": 5531,
+      "21-30 words": 0,
+      "31+ words": 0
+    }
+  },
+  "platform_overlap": {
+    "ai_mode_unique_domains": 29795,
+    "gemini_unique_domains": 5143,
+    "overlap_domains": 1556,
+    "jaccard_similarity": 0.0466,
+    "top_shared_domains": [
+      "12amagency.com",
+      "1800accountant.com",
+      "1upnutrition.com",
+      "2001-2009.state.gov",
+      "2021-2025.state.gov",
+      "247wallst.com",
+      "6sense.com",
+      "9sail.com",
+      "9to5google.com",
+      "9to5mac.com",
+      "aane.org",
+      "aaronparecki.com",
+      "aasnova.org",
+      "about.ads.microsoft.com",
+      "about.ups.com",
+      "aboutaustralia.com",
+      "abramsonlaborgroup.com",
+      "acaai.org",
+      "acacia.edu",
+      "academic.oup.com"
+    ]
+  },
+  "h7_citation_vs_organic_rank": {
+    "n_citations": 153425,
+    "n_queries_with_serp": 4998,
+    "url_in_top10_count": 35360,
+    "url_in_top10_pct": 23.05,
+    "mean_organic_rank_url": 4.27,
+    "median_organic_rank_url": 4.0,
+    "domain_in_top10_count": 55282,
+    "domain_in_top10_pct": 36.03,
+    "mean_organic_rank_domain": 3.92,
+    "rank_distribution": {
+      "rank_1": 6096,
+      "rank_2": 5335,
+      "rank_3": 4592,
+      "rank_4": 4092,
+      "rank_5": 3691,
+      "rank_6": 3452,
+      "rank_7": 3078,
+      "rank_8": 2638,
+      "rank_9": 1732,
+      "rank_10": 654
+    },
+    "by_platform": [
+      {
+        "platform": "ai_mode",
+        "n_citations": 88392,
+        "url_in_top10_pct": 22.49,
+        "domain_in_top10_pct": 39.54,
+        "mean_organic_rank_url": 4.43
+      },
+      {
+        "platform": "chatgpt",
+        "n_citations": 3529,
+        "url_in_top10_pct": 4.19,
+        "domain_in_top10_pct": 21.05,
+        "mean_organic_rank_url": 4.14
+      },
+      {
+        "platform": "copilot",
+        "n_citations": 8779,
+        "url_in_top10_pct": 23.68,
+        "domain_in_top10_pct": 34.88,
+        "mean_organic_rank_url": 3.07
+      },
+      {
+        "platform": "gemini",
+        "n_citations": 13487,
+        "url_in_top10_pct": 41.14,
+        "domain_in_top10_pct": 21.39,
+        "mean_organic_rank_url": 4.06
+      },
+      {
+        "platform": "grok",
+        "n_citations": 30676,
+        "url_in_top10_pct": 14.13,
+        "domain_in_top10_pct": 30.43,
+        "mean_organic_rank_url": 4.41
+      },
+      {
+        "platform": "perplexity",
+        "n_citations": 8562,
+        "url_in_top10_pct": 39.4,
+        "domain_in_top10_pct": 50.25,
+        "mean_organic_rank_url": 4.18
+      }
+    ]
+  }
+}

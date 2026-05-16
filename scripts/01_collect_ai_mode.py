@@ -23,6 +23,14 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+
+# Force UTF-8 stdout/stderr (Windows defaults to cp1252 when piped to Tee-Object,
+# which crashes on '\u2192' arrows etc.)
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 from dotenv import load_dotenv
 from tqdm import tqdm
 

@@ -1,0 +1,2 @@
+ai_mode_unique_domains,gemini_unique_domains,overlap_domains,jaccard_similarity,top_shared_domains
+29795,5143,1556,0.0466,"['12amagency.com', '1800accountant.com', '1upnutrition.com', '2001-2009.state.gov', '2021-2025.state.gov', '247wallst.com', '6sense.com', '9sail.com', '9to5google.com', '9to5mac.com', 'aane.org', 'aaronparecki.com', 'aasnova.org', 'about.ads.microsoft.com', 'about.ups.com', 'aboutaustralia.com', 'abramsonlaborgroup.com', 'acaai.org', 'acacia.edu', 'academic.oup.com']"

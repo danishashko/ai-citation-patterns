@@ -27,6 +27,12 @@ Usage:
 """
 
 import argparse
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    _sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 import json
 import os
 import re
@@ -73,7 +79,7 @@ MAX_WORKERS = 10
 SLEEP_BETWEEN = 0.15
 
 # Snapshot date — when the data was collected
-SNAPSHOT_DATE = datetime(2025, 2, 1, tzinfo=timezone.utc)
+SNAPSHOT_DATE = datetime(2026, 5, 12, tzinfo=timezone.utc)
 
 
 def save_fig(fig, name: str):

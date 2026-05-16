@@ -1,0 +1,92 @@
+{
+  "n_sentences": 11215,
+  "metrics": {
+    "flesch_reading_ease": {
+      "n": 11215,
+      "mean": 53.82,
+      "median": 66.4,
+      "std": 49.44,
+      "min": -387.39,
+      "max": 121.22,
+      "p25": 32.56,
+      "p75": 83.32
+    },
+    "flesch_kincaid_grade": {
+      "n": 11215,
+      "mean": 6.85,
+      "median": 5.24,
+      "std": 6.84,
+      "min": -3.4,
+      "max": 67.79,
+      "p25": 2.88,
+      "p75": 9.96
+    },
+    "gunning_fog": {
+      "n": 11215,
+      "mean": 9.28,
+      "median": 10.0,
+      "std": 8.81,
+      "min": 0.4,
+      "max": 42.0,
+      "p25": 2.0,
+      "p75": 12.25
+    },
+    "coleman_liau": {
+      "n": 11215,
+      "mean": 7.32,
+      "median": 7.28,
+      "std": 9.55,
+      "min": -33.8,
+      "max": 134.4,
+      "p25": 1.48,
+      "p75": 13.08
+    },
+    "ari": {
+      "n": 11215,
+      "mean": 6.46,
+      "median": 5.56,
+      "std": 7.97,
+      "min": -15.72,
+      "max": 139.21,
+      "p25": 0.85,
+      "p75": 10.27
+    },
+    "dale_chall": {
+      "n": 11215,
+      "mean": 10.92,
+      "median": 10.2,
+      "std": 5.04,
+      "min": 0.05,
+      "max": 19.67,
+      "p25": 7.78,
+      "p75": 13.36
+    },
+    "syllables_per_word": {
+      "n": 11215,
+      "mean": 1.76,
+      "median": 1.6,
+      "std": 0.59,
+      "min": 1.0,
+      "max": 7.0,
+      "p25": 1.4,
+      "p75": 2.0
+    }
+  },
+  "flesch_ease_distribution": {
+    "Difficult (30-49)": 2747,
+    "Very Easy (90-100)": 2569,
+    "Very Confusing (<30)": 2302,
+    "Standard (60-69)": 1464,
+    "Easy (80-89)": 1351,
+    "Fairly Easy (70-79)": 489,
+    "Fairly Difficult (50-59)": 293
+  },
+  "grade_level_distribution": {
+    "Elementary (\u22644)": 4386,
+    "College+ (13+)": 2286,
+    "High School (9-10)": 1653,
+    "Middle School (5-6)": 1447,
+    "Junior High (7-8)": 1397,
+    "Senior High (11-12)": 46
+  }
+}

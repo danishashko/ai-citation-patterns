@@ -34,6 +34,12 @@ Usage:
 """
 
 import argparse
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    _sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 import json
 import os
 import re
@@ -225,6 +231,10 @@ def collect_serp(queries_csv: str, limit: int | None) -> tuple[list[dict], pd.Da
 
     print(f"  Collecting {len(new_df)} new queries (skipping {len(already_done)} done).")
 
+    raw_out_path = RAW_DIR / "serp_results.json"
+    SAVE_EVERY = 50
+    since_save = 0
+
     for _, row in tqdm(new_df.iterrows(), total=len(new_df), desc="SERP queries"):
         query = str(row["query"])
 
@@ -242,6 +252,14 @@ def collect_serp(queries_csv: str, limit: int | None) -> tuple[list[dict], pd.Da
             "result_count": len(parsed),
             "results": parsed,
         })
+
+        since_save += 1
+        if since_save >= SAVE_EVERY:
+            tmp_path = raw_out_path.with_suffix(".json.tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(all_raw, f, ensure_ascii=False)
+            os.replace(tmp_path, raw_out_path)
+            since_save = 0
 
         time.sleep(SLEEP_BETWEEN)
 
