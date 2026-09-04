@@ -1,5 +1,8 @@
 # AI Citation Patterns — May 2026
 
+> The dataset from this study is now maintained in the consolidated [ai-search-datasets](https://github.com/danishashko/ai-search-datasets/tree/main/ai-citation-patterns) repo alongside newer studies. This repo keeps the full pipeline, notebooks, and charts.
+
+
 **153,425 citations. 5,000 queries. 6 AI platforms.**
 
 This repo contains the dataset, analysis scripts, and findings from a large-scale study of how AI search platforms select and cite web content.
